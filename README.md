@@ -1,15 +1,121 @@
-DebtAI
+# DebtAI
 
-Lokale KI-Anwendung zur Analyse von Schuldendokumenten.
+DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 0.1 liefert das technische Fundament: Docker Compose, PostgreSQL mit pgvector, FastAPI-Backend, Paperless-Import und eine Dokumentenliste.
 
-Ziele:
+## Funktionen in Version 0.1
 
-* Import von Dokumenten aus Paperless-ngx
-* KI-gestützte Extraktion von Forderungen
-* Erstellung eines Gläubiger- und Forderungsverzeichnisses
-* Lokaler Betrieb ohne Cloud
-* PostgreSQL als Datenbank
-* Ollama + Qwen als KI-Backend
+- Docker-Compose-Setup fuer PostgreSQL, Backend, Frontend und optional Ollama
+- PostgreSQL-17-Schema inklusive `documents`, `creditors`, `claims`, `claim_events` und `embeddings`
+- pgvector-Aktivierung fuer spaetere semantische Suche
+- Paperless-ngx-Import ueber die Paperless API
+- Dokumentenliste mit Suche und OCR-Detailansicht
+- README mit lokaler Installation
 
-Status:
-Projektplanung
+## Voraussetzungen
+
+- Docker Desktop oder Docker Engine mit Docker Compose
+- Laufende Paperless-ngx-Instanz
+- Paperless API-Token oder Paperless Benutzername/Passwort
+
+## Installation
+
+1. Umgebungsdatei erstellen:
+
+```bash
+cp .env.example .env
+```
+
+2. `.env` anpassen:
+
+```env
+PAPERLESS_API_URL=http://dein-paperless-host:8000
+PAPERLESS_API_TOKEN=dein_api_token
+```
+
+Alternativ kann statt `PAPERLESS_API_TOKEN` auch Benutzername und Passwort gesetzt werden:
+
+```env
+PAPERLESS_USERNAME=dein_benutzer
+PAPERLESS_PASSWORD=dein_passwort
+```
+
+3. Anwendung starten:
+
+```bash
+docker compose up --build
+```
+
+4. DebtAI im Browser oeffnen:
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000/docs
+
+## Paperless importieren
+
+Im Frontend auf `Paperless importieren` klicken.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/import/paperless \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
+
+Optional kann die Anzahl fuer einen Testlauf begrenzt werden:
+
+```bash
+curl -X POST http://localhost:8000/api/import/paperless \
+  -H "Content-Type: application/json" \
+  -d "{\"limit\": 25}"
+```
+
+## Datenbank
+
+Die Datenbank wird beim Start automatisch vorbereitet. Alembic legt das Schema an, `db/init.sql` aktiviert zusaetzlich die pgvector-Erweiterung.
+
+Wichtige Tabellen:
+
+- `documents`: importierte Paperless-Dokumente mit OCR-Text
+- `creditors`: eindeutige Glaeubiger
+- `creditor_aliases`: alternative Schreibweisen
+- `claims`: Forderungen
+- `claim_events`: Forderungshistorie
+- `embeddings`: Textabschnitte und spaetere Vektor-Embeddings
+
+## Ollama
+
+Ollama ist fuer Version 0.1 noch nicht aktiv noetig. Der Container ist vorbereitet und kann bei Bedarf gestartet werden:
+
+```bash
+docker compose --profile ai up ollama
+```
+
+Das Standardmodell fuer spaetere Versionen ist Qwen3 14B.
+
+## Entwicklung
+
+Backend lokal starten:
+
+```bash
+cd backend
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Frontend lokal starten:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Roadmap
+
+- Version 0.2: KI-Extraktion und Forderungserkennung
+- Version 0.3: Konsolidierung und Glaeubigeruebersicht
+- Version 0.4: Dashboard
+- Version 0.5: KI-Chat mit Quellen
+- Version 1.0: Vergleichsmodul und Exportfunktionen
