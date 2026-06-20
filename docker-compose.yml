@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: debtai-postgres
+    environment:
+      POSTGRES_DB: debtai
+      POSTGRES_USER: debtai
+      POSTGRES_PASSWORD: debtai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U debtai -d debtai"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: debtai-backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://debtai:debtai@postgres:5432/debtai
+      PAPERLESS_API_URL: ${PAPERLESS_API_URL:-}
+      PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+      PAPERLESS_USERNAME: ${PAPERLESS_USERNAME:-}
+      PAPERLESS_PASSWORD: ${PAPERLESS_PASSWORD:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: debtai-frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: debtai-ollama
+    profiles:
+      - ai
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  postgres_data:
+  ollama_data:
