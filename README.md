@@ -14,8 +14,42 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 ## Voraussetzungen
 
 - Docker Desktop oder Docker Engine mit Docker Compose
-- Laufende Paperless-ngx-Instanz
 - Paperless API-Token oder Paperless Benutzername/Passwort
+
+## Paperless-ngx installieren
+
+Eine lokale Paperless-ngx-Installation mit Redis und PostgreSQL ist im Ordner
+`paperless` vorbereitet. Paperless verwendet Port `8001`, weil das DebtAI-Backend
+bereits Port `8000` belegt.
+
+Paperless starten:
+
+```powershell
+cd paperless
+docker compose up -d
+```
+
+Beim ersten Start einen Administrator anlegen:
+
+```powershell
+docker compose exec webserver createsuperuser
+```
+
+Danach Paperless unter http://localhost:8001 oeffnen. Dokumente koennen in den
+Ordner `paperless/consume` kopiert werden; Paperless importiert sie automatisch.
+
+Die Daten liegen in Docker-Volumes. Ein Export kann in Paperless erstellt und
+im Ordner `paperless/export` abgelegt werden.
+
+Paperless stoppen:
+
+```powershell
+docker compose down
+```
+
+Die Daten bleiben dabei erhalten. `docker compose down -v` loescht dagegen auch
+die Paperless-Datenbank und Dokumente und sollte nur fuer einen bewussten
+Komplettreset verwendet werden.
 
 ## Installation
 
@@ -29,6 +63,14 @@ cp .env.example .env
 
 ```env
 PAPERLESS_API_URL=http://dein-paperless-host:8000
+PAPERLESS_API_TOKEN=dein_api_token
+```
+
+Fuer die mitgelieferte lokale Paperless-Installation lautet die Adresse aus
+dem DebtAI-Container:
+
+```env
+PAPERLESS_API_URL=http://host.docker.internal:8001
 PAPERLESS_API_TOKEN=dein_api_token
 ```
 
@@ -119,3 +161,4 @@ npm run dev
 - Version 0.4: Dashboard
 - Version 0.5: KI-Chat mit Quellen
 - Version 1.0: Vergleichsmodul und Exportfunktionen
+
