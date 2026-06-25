@@ -38,6 +38,11 @@ export type ImportResult = {
   skipped: number;
 };
 
+export type AIStatus = {
+  configured_provider: string;
+  available_providers: string[];
+};
+
 export async function fetchDocuments(search: string): Promise<DocumentListResponse> {
   const response = await api.get<DocumentListResponse>("/api/documents", {
     params: search ? { search } : undefined,
@@ -52,5 +57,10 @@ export async function fetchDocument(id: number): Promise<DocumentDetail> {
 
 export async function importPaperless(): Promise<ImportResult> {
   const response = await api.post<ImportResult>("/api/import/paperless", {});
+  return response.data;
+}
+
+export async function fetchAIStatus(): Promise<AIStatus> {
+  const response = await api.get<AIStatus>("/api/ai/status");
   return response.data;
 }
