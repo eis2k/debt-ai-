@@ -13,6 +13,7 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - Speicherung erkannter Glaeubiger, Forderungen und Forderungsereignisse
 - Glaeubigeruebersicht und konsolidierte Forderungsbetraege
 - Dashboard mit Kennzahlen und Statusverteilung
+- Vergleichsmodul fuer moegliche doppelte oder zusammengehoerige Forderungen
 - Quellen-Chat ueber importierte Dokumente
 - CSV-Export der Forderungen
 - Dokumentenliste mit Suche und OCR-Detailansicht
@@ -106,6 +107,7 @@ Die Oberflaeche ist in vier Tabs aufgeteilt:
 - `Dokumente`: Paperless-Import, Suche, OCR-Detailansicht und Forderungserkennung
 - `Glaeubiger`: konsolidierte Glaeubiger mit Anzahl und Summe der Forderungen
 - `Dashboard`: Kennzahlen, offene Betraege, betitelte Forderungen und Statusgruppen
+- `Vergleich`: moegliche doppelte oder zusammengehoerige Forderungen
 - `Chat`: Fragen an die importierten Dokumente mit Quellenanzeige
 
 Oben rechts kann ueber das Download-Symbol ein CSV-Export der Forderungen
@@ -195,6 +197,18 @@ Forderungen koennen als CSV exportiert werden:
 
 ```bash
 curl http://localhost:8000/api/exports/claims.csv
+```
+
+## Vergleich
+
+Das Vergleichsmodul sucht nach moeglichen Doppelungen oder zusammengehoerigen
+Forderungen. Verglichen werden aktuell gleiche Aktenzeichen sowie gleiche
+Kombinationen aus Glaeubiger und Betrag.
+
+Alternativ per API:
+
+```bash
+curl http://localhost:8000/api/comparisons/claims
 ```
 
 ## KI-Anbieter anschliessen
@@ -294,4 +308,4 @@ npm run dev
 - Version 0.3: Konsolidierung und Glaeubigeruebersicht umgesetzt
 - Version 0.4: Dashboard umgesetzt
 - Version 0.5: KI-Chat mit Quellen umgesetzt
-- Version 1.0: Exportfunktionen umgesetzt
+- Version 1.0: Vergleichsmodul und Exportfunktionen umgesetzt
