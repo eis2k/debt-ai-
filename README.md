@@ -93,6 +93,20 @@ docker compose up --build
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000/docs
 
+## Einstellungen in der Oberflaeche
+
+In der DebtAI-Oberflaeche befindet sich oben rechts ein Zahnrad-Symbol. Darueber
+oeffnet sich das Einstellungsmenue.
+
+Das Menue zeigt:
+
+- welcher KI-Anbieter aktiv ist
+- ob OpenAI, Gemini oder Claude technisch verbunden sind
+- wie viele Anbieter einsatzbereit sind
+
+API-Schluessel werden aus Sicherheitsgruenden nicht im Browser angezeigt. Sie
+liegen in der lokalen `.env`-Datei und werden vom Backend geladen.
+
 ## Paperless importieren
 
 Im Frontend auf `Paperless importieren` klicken.
