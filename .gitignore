@@ -11,3 +11,10 @@ build/
 .DS_Store
 postgres_data/
 ollama_data/
+.docker-local/
+paperless/paperless.env
+paperless/consume/*
+paperless/export/*
+!paperless/consume/.gitkeep
+!paperless/export/.gitkeep
+

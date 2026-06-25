@@ -8,14 +8,49 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - PostgreSQL-17-Schema inklusive `documents`, `creditors`, `claims`, `claim_events` und `embeddings`
 - pgvector-Aktivierung fuer spaetere semantische Suche
 - Paperless-ngx-Import ueber die Paperless API
+- vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - Dokumentenliste mit Suche und OCR-Detailansicht
 - README mit lokaler Installation
 
 ## Voraussetzungen
 
 - Docker Desktop oder Docker Engine mit Docker Compose
-- Laufende Paperless-ngx-Instanz
 - Paperless API-Token oder Paperless Benutzername/Passwort
+
+## Paperless-ngx installieren
+
+Eine lokale Paperless-ngx-Installation mit Redis und PostgreSQL ist im Ordner
+`paperless` vorbereitet. Paperless verwendet Port `8001`, weil das DebtAI-Backend
+bereits Port `8000` belegt.
+
+Paperless starten:
+
+```powershell
+cd paperless
+docker compose up -d
+```
+
+Beim ersten Start einen Administrator anlegen:
+
+```powershell
+docker compose exec webserver createsuperuser
+```
+
+Danach Paperless unter http://localhost:8001 oeffnen. Dokumente koennen in den
+Ordner `paperless/consume` kopiert werden; Paperless importiert sie automatisch.
+
+Die Daten liegen in Docker-Volumes. Ein Export kann in Paperless erstellt und
+im Ordner `paperless/export` abgelegt werden.
+
+Paperless stoppen:
+
+```powershell
+docker compose down
+```
+
+Die Daten bleiben dabei erhalten. `docker compose down -v` loescht dagegen auch
+die Paperless-Datenbank und Dokumente und sollte nur fuer einen bewussten
+Komplettreset verwendet werden.
 
 ## Installation
 
@@ -29,6 +64,14 @@ cp .env.example .env
 
 ```env
 PAPERLESS_API_URL=http://dein-paperless-host:8000
+PAPERLESS_API_TOKEN=dein_api_token
+```
+
+Fuer die mitgelieferte lokale Paperless-Installation lautet die Adresse aus
+dem DebtAI-Container:
+
+```env
+PAPERLESS_API_URL=http://host.docker.internal:8001
 PAPERLESS_API_TOKEN=dein_api_token
 ```
 
@@ -68,6 +111,55 @@ Optional kann die Anzahl fuer einen Testlauf begrenzt werden:
 curl -X POST http://localhost:8000/api/import/paperless \
   -H "Content-Type: application/json" \
   -d "{\"limit\": 25}"
+```
+
+## KI-Anbieter anschliessen
+
+DebtAI kann technisch fuer OpenAI, Gemini oder Claude vorbereitet werden. Ohne
+API-Schluessel startet die Anwendung weiterhin normal.
+
+In `.env` einen Anbieter auswaehlen und den passenden Schluessel setzen:
+
+```env
+AI_PROVIDER=openai
+OPENAI_API_KEY=dein_openai_schluessel
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Alternativ Gemini:
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=dein_gemini_schluessel
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Oder Claude:
+
+```env
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=dein_anthropic_schluessel
+ANTHROPIC_MODEL=claude-3-5-haiku-latest
+```
+
+Nach einer Aenderung der `.env` das Backend neu starten:
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+Status pruefen:
+
+```bash
+curl http://localhost:8000/api/ai/status
+```
+
+Technischer Test:
+
+```bash
+curl -X POST http://localhost:8000/api/ai/complete \
+  -H "Content-Type: application/json" \
+  -d "{\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit OK.\"}]}"
 ```
 
 ## Datenbank
