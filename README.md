@@ -1,8 +1,8 @@
 # DebtAI
 
-DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 0.2 erweitert das technische Fundament um eine erste KI-Extraktion fuer Forderungsdaten.
+DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 1.0 verbindet Paperless-Import, KI-Extraktion, Forderungskonsolidierung, Dashboard, Quellen-Chat und CSV-Export.
 
-## Funktionen in Version 0.2
+## Funktionen in Version 1.0
 
 - Docker-Compose-Setup fuer PostgreSQL, Backend, Frontend und optional Ollama
 - PostgreSQL-17-Schema inklusive `documents`, `creditors`, `claims`, `claim_events` und `embeddings`
@@ -11,6 +11,10 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - KI-Extraktion fuer Forderungsdaten aus OCR-Texten
 - Speicherung erkannter Glaeubiger, Forderungen und Forderungsereignisse
+- Glaeubigeruebersicht und konsolidierte Forderungsbetraege
+- Dashboard mit Kennzahlen und Statusverteilung
+- Quellen-Chat ueber importierte Dokumente
+- CSV-Export der Forderungen
 - Dokumentenliste mit Suche und OCR-Detailansicht
 - README mit lokaler Installation
 
@@ -95,6 +99,18 @@ docker compose up --build
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000/docs
 
+## Arbeitsbereiche
+
+Die Oberflaeche ist in vier Tabs aufgeteilt:
+
+- `Dokumente`: Paperless-Import, Suche, OCR-Detailansicht und Forderungserkennung
+- `Glaeubiger`: konsolidierte Glaeubiger mit Anzahl und Summe der Forderungen
+- `Dashboard`: Kennzahlen, offene Betraege, betitelte Forderungen und Statusgruppen
+- `Chat`: Fragen an die importierten Dokumente mit Quellenanzeige
+
+Oben rechts kann ueber das Download-Symbol ein CSV-Export der Forderungen
+geladen werden.
+
 ## Einstellungen in der Oberflaeche
 
 In der DebtAI-Oberflaeche befindet sich oben rechts ein Zahnrad-Symbol. Darueber
@@ -155,6 +171,30 @@ Alternativ per API:
 curl -X POST http://localhost:8000/api/extractions/documents/1/claim \
   -H "Content-Type: application/json" \
   -d "{}"
+```
+
+## Quellen-Chat
+
+Im Tab `Chat` kann eine Frage zu den importierten Dokumenten gestellt werden.
+DebtAI sucht passende OCR-Texte, uebergibt kurze Quellen-Auschnitte an den
+konfigurierten KI-Anbieter und zeigt Antwort plus Quellen an.
+
+Der Chat benoetigt wie die Forderungserkennung einen konfigurierten KI-Anbieter.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"question\":\"Welche Forderungen sind offen?\"}"
+```
+
+## Export
+
+Forderungen koennen als CSV exportiert werden:
+
+```bash
+curl http://localhost:8000/api/exports/claims.csv
 ```
 
 ## KI-Anbieter anschliessen
@@ -248,10 +288,10 @@ npm install
 npm run dev
 ```
 
-## Roadmap
+## Roadmap-Status
 
-- Version 0.2: KI-Extraktion und Forderungserkennung
-- Version 0.3: Konsolidierung und Glaeubigeruebersicht
-- Version 0.4: Dashboard
-- Version 0.5: KI-Chat mit Quellen
-- Version 1.0: Vergleichsmodul und Exportfunktionen
+- Version 0.2: KI-Extraktion und Forderungserkennung umgesetzt
+- Version 0.3: Konsolidierung und Glaeubigeruebersicht umgesetzt
+- Version 0.4: Dashboard umgesetzt
+- Version 0.5: KI-Chat mit Quellen umgesetzt
+- Version 1.0: Exportfunktionen umgesetzt
