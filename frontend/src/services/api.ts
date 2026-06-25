@@ -105,6 +105,19 @@ export type ChatResponse = {
   sources: { document_id: number; filename: string; snippet: string }[];
 };
 
+export type ComparisonGroup = {
+  reason: string;
+  items: {
+    claim_id: number;
+    creditor: string | null;
+    amount: string | null;
+    currency: string;
+    claim_reference: string | null;
+    contract_reference: string | null;
+    status: string;
+  }[];
+};
+
 export async function fetchDocuments(search: string): Promise<DocumentListResponse> {
   const response = await api.get<DocumentListResponse>("/api/documents", {
     params: search ? { search } : undefined,
@@ -149,4 +162,9 @@ export async function askChat(question: string): Promise<ChatResponse> {
 
 export function exportClaimsUrl(): string {
   return `${baseURL}/api/exports/claims.csv`;
+}
+
+export async function fetchComparisons(): Promise<ComparisonGroup[]> {
+  const response = await api.get<ComparisonGroup[]>("/api/comparisons/claims");
+  return response.data;
 }
