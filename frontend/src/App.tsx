@@ -33,6 +33,8 @@ import {
   DocumentDetail,
   DocumentSummary,
   AIStatus,
+  ClaimExtractionResult,
+  extractClaim,
   fetchAIStatus,
   fetchDocument,
   fetchDocuments,
@@ -53,6 +55,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<ClaimExtractionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDetail | null>(null);
 
@@ -103,10 +107,24 @@ export default function App() {
 
   async function openDocument(document: DocumentSummary) {
     setError(null);
+    setExtractionResult(null);
     try {
       setSelected(await fetchDocument(document.id));
     } catch (err) {
       setError("Dokument konnte nicht geoeffnet werden.");
+    }
+  }
+
+  async function handleExtractClaim() {
+    if (!selected) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      setExtractionResult(await extractClaim(selected.id));
+    } catch (err) {
+      setError("Forderung konnte nicht erkannt werden. Pruefe KI-Anbieter und OCR-Text.");
+    } finally {
+      setExtracting(false);
     }
   }
 
@@ -227,7 +245,22 @@ export default function App() {
       </Container>
 
       <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} fullWidth maxWidth="md">
-        <DialogTitle>{selected?.filename}</DialogTitle>
+        <DialogTitle>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+            <Typography variant="h6" component="span" sx={{ flexGrow: 1 }}>
+              {selected?.filename}
+            </Typography>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => void handleExtractClaim()}
+              disabled={!selected?.ocr_text || extracting}
+              startIcon={extracting ? <CircularProgress color="inherit" size={16} /> : undefined}
+            >
+              Forderung erkennen
+            </Button>
+          </Stack>
+        </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -235,6 +268,17 @@ export default function App() {
               <Chip size="small" label={selected?.document_type ?? "Ohne Typ"} />
               <Chip size="small" label={formatDate(selected?.document_date ?? null)} />
             </Stack>
+            {extractionResult && (
+              <Alert severity="success">
+                Forderung gespeichert: {extractionResult.extracted.creditor_name ?? "Unbekannter Glaeubiger"}
+                {extractionResult.extracted.amount
+                  ? `, ${extractionResult.extracted.amount} ${extractionResult.extracted.currency}`
+                  : ""}
+                {extractionResult.extracted.claim_reference
+                  ? `, Aktenzeichen ${extractionResult.extracted.claim_reference}`
+                  : ""}
+              </Alert>
+            )}
             <Typography
               component="pre"
               variant="body2"
