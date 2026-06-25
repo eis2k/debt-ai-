@@ -36,6 +36,7 @@ import {
   AIStatus,
   ChatResponse,
   ClaimExtractionResult,
+  ComparisonGroup,
   CreditorSummary,
   DashboardSummary,
   DocumentDetail,
@@ -44,6 +45,7 @@ import {
   exportClaimsUrl,
   extractClaim,
   fetchAIStatus,
+  fetchComparisons,
   fetchCreditors,
   fetchDashboard,
   fetchDocument,
@@ -51,7 +53,7 @@ import {
   importPaperless,
 } from "./services/api";
 
-type View = "documents" | "creditors" | "dashboard" | "chat";
+type View = "documents" | "creditors" | "dashboard" | "comparison" | "chat";
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
@@ -68,6 +70,7 @@ export default function App() {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [creditors, setCreditors] = useState<CreditorSummary[]>([]);
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [comparisons, setComparisons] = useState<ComparisonGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -123,10 +126,23 @@ export default function App() {
     }
   }
 
+  async function loadComparisons() {
+    setLoading(true);
+    setError(null);
+    try {
+      setComparisons(await fetchComparisons());
+    } catch (err) {
+      setError("Vergleich konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function refreshCurrentView(nextView = view) {
     if (nextView === "documents") await loadDocuments();
     if (nextView === "creditors") await loadCreditors();
     if (nextView === "dashboard") await loadDashboard();
+    if (nextView === "comparison") await loadComparisons();
   }
 
   async function handleImport() {
@@ -176,6 +192,7 @@ export default function App() {
       setExtractionResult(await extractClaim(selected.id));
       await loadCreditors();
       await loadDashboard();
+      await loadComparisons();
     } catch (err) {
       setError("Forderung konnte nicht erkannt werden. Pruefe KI-Anbieter und OCR-Text.");
     } finally {
@@ -205,6 +222,7 @@ export default function App() {
     void loadDocuments("");
     void loadCreditors();
     void loadDashboard();
+    void loadComparisons();
   }, []);
 
   return (
@@ -242,6 +260,7 @@ export default function App() {
           <Tab value="documents" label="Dokumente" />
           <Tab value="creditors" label="Glaeubiger" />
           <Tab value="dashboard" label="Dashboard" />
+          <Tab value="comparison" label="Vergleich" />
           <Tab value="chat" label="Chat" />
         </Tabs>
       </AppBar>
@@ -252,6 +271,7 @@ export default function App() {
           {view === "documents" && renderDocuments()}
           {view === "creditors" && renderCreditors()}
           {view === "dashboard" && renderDashboard()}
+          {view === "comparison" && renderComparison()}
           {view === "chat" && renderChat()}
         </Stack>
       </Container>
@@ -393,6 +413,56 @@ export default function App() {
             </TableBody>
           </Table>
         </TableContainer>
+      </Stack>
+    );
+  }
+
+  function renderComparison() {
+    return (
+      <Stack spacing={2}>
+        {loading && (
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <CircularProgress size={20} />
+              <Typography variant="body2">Laedt</Typography>
+            </Stack>
+          </Paper>
+        )}
+        {!loading && comparisons.length === 0 && (
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Typography variant="body2">Keine moeglichen Doppelungen oder Vergleichstreffer</Typography>
+          </Paper>
+        )}
+        {!loading &&
+          comparisons.map((group, index) => (
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }} key={`${group.reason}-${index}`}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={5}>{group.reason}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Glaeubiger</TableCell>
+                    <TableCell>Betrag</TableCell>
+                    <TableCell>Aktenzeichen</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {group.items.map((item) => (
+                    <TableRow key={item.claim_id}>
+                      <TableCell>{item.claim_id}</TableCell>
+                      <TableCell>{item.creditor ?? "-"}</TableCell>
+                      <TableCell>{formatMoney(item.amount, item.currency)}</TableCell>
+                      <TableCell>{item.claim_reference ?? item.contract_reference ?? "-"}</TableCell>
+                      <TableCell>{item.status}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ))}
       </Stack>
     );
   }
