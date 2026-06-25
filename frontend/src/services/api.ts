@@ -43,6 +43,29 @@ export type AIStatus = {
   available_providers: string[];
 };
 
+export type ExtractedClaim = {
+  creditor_name: string | null;
+  amount: string | null;
+  currency: string;
+  claim_reference: string | null;
+  contract_reference: string | null;
+  title_exists: boolean;
+  title_type: string | null;
+  status: string;
+  event_type: string;
+  event_date: string | null;
+  notes: string | null;
+};
+
+export type ClaimExtractionResult = {
+  document_id: number;
+  claim_id: number;
+  creditor_id: number | null;
+  provider: string;
+  model: string;
+  extracted: ExtractedClaim;
+};
+
 export async function fetchDocuments(search: string): Promise<DocumentListResponse> {
   const response = await api.get<DocumentListResponse>("/api/documents", {
     params: search ? { search } : undefined,
@@ -62,5 +85,10 @@ export async function importPaperless(): Promise<ImportResult> {
 
 export async function fetchAIStatus(): Promise<AIStatus> {
   const response = await api.get<AIStatus>("/api/ai/status");
+  return response.data;
+}
+
+export async function extractClaim(documentId: number): Promise<ClaimExtractionResult> {
+  const response = await api.post<ClaimExtractionResult>(`/api/extractions/documents/${documentId}/claim`, {});
   return response.data;
 }
