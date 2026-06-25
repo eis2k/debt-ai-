@@ -1,6 +1,6 @@
 # DebtAI
 
-DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 0.1 liefert das technische Fundament: Docker Compose, PostgreSQL mit pgvector, FastAPI-Backend, Paperless-Import und eine Dokumentenliste.
+DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 0.2 erweitert das technische Fundament um eine erste KI-Extraktion fuer Forderungsdaten.
 
 ## Funktionen in Version 0.1
 
@@ -9,6 +9,8 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - pgvector-Aktivierung fuer spaetere semantische Suche
 - Paperless-ngx-Import ueber die Paperless API
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
+- KI-Extraktion fuer Forderungsdaten aus OCR-Texten
+- Speicherung erkannter Glaeubiger, Forderungen und Forderungsereignisse
 - Dokumentenliste mit Suche und OCR-Detailansicht
 - README mit lokaler Installation
 
@@ -125,6 +127,34 @@ Optional kann die Anzahl fuer einen Testlauf begrenzt werden:
 curl -X POST http://localhost:8000/api/import/paperless \
   -H "Content-Type: application/json" \
   -d "{\"limit\": 25}"
+```
+
+## Forderung erkennen
+
+Ein importiertes Dokument in der Dokumentenliste anklicken und im Detailfenster
+`Forderung erkennen` auswaehlen. DebtAI sendet den OCR-Text an den konfigurierten
+KI-Anbieter und speichert die erkannten Daten in den Tabellen `creditors`,
+`claims` und `claim_events`.
+
+Erkannt werden unter anderem:
+
+- Glaeubiger
+- Forderungsbetrag und Waehrung
+- Aktenzeichen oder Vertragsreferenz
+- Titelstatus
+- Dokument- oder Ereignistyp
+- relevantes Datum
+
+Die KI-Extraktion benoetigt einen konfigurierten Anbieter in `.env`. Ohne
+API-Schluessel bleibt DebtAI normal nutzbar, die Forderungserkennung meldet dann
+aber, dass kein KI-Anbieter eingerichtet ist.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/extractions/documents/1/claim \
+  -H "Content-Type: application/json" \
+  -d "{}"
 ```
 
 ## KI-Anbieter anschliessen
