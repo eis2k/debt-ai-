@@ -8,6 +8,7 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - PostgreSQL-17-Schema inklusive `documents`, `creditors`, `claims`, `claim_events` und `embeddings`
 - pgvector-Aktivierung fuer spaetere semantische Suche
 - Paperless-ngx-Import ueber die Paperless API
+- vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - Dokumentenliste mit Suche und OCR-Detailansicht
 - README mit lokaler Installation
 
@@ -112,6 +113,55 @@ curl -X POST http://localhost:8000/api/import/paperless \
   -d "{\"limit\": 25}"
 ```
 
+## KI-Anbieter anschliessen
+
+DebtAI kann technisch fuer OpenAI, Gemini oder Claude vorbereitet werden. Ohne
+API-Schluessel startet die Anwendung weiterhin normal.
+
+In `.env` einen Anbieter auswaehlen und den passenden Schluessel setzen:
+
+```env
+AI_PROVIDER=openai
+OPENAI_API_KEY=dein_openai_schluessel
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Alternativ Gemini:
+
+```env
+AI_PROVIDER=gemini
+GEMINI_API_KEY=dein_gemini_schluessel
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Oder Claude:
+
+```env
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=dein_anthropic_schluessel
+ANTHROPIC_MODEL=claude-3-5-haiku-latest
+```
+
+Nach einer Aenderung der `.env` das Backend neu starten:
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+Status pruefen:
+
+```bash
+curl http://localhost:8000/api/ai/status
+```
+
+Technischer Test:
+
+```bash
+curl -X POST http://localhost:8000/api/ai/complete \
+  -H "Content-Type: application/json" \
+  -d "{\"messages\":[{\"role\":\"user\",\"content\":\"Antworte nur mit OK.\"}]}"
+```
+
 ## Datenbank
 
 Die Datenbank wird beim Start automatisch vorbereitet. Alembic legt das Schema an, `db/init.sql` aktiviert zusaetzlich die pgvector-Erweiterung.
@@ -161,4 +211,3 @@ npm run dev
 - Version 0.4: Dashboard
 - Version 0.5: KI-Chat mit Quellen
 - Version 1.0: Vergleichsmodul und Exportfunktionen
-
