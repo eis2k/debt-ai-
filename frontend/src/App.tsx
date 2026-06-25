@@ -1,5 +1,6 @@
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
+import SettingsIcon from "@mui/icons-material/Settings";
 import SyncIcon from "@mui/icons-material/Sync";
 import {
   Alert,
@@ -31,6 +32,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   DocumentDetail,
   DocumentSummary,
+  AIStatus,
+  fetchAIStatus,
   fetchDocument,
   fetchDocuments,
   importPaperless,
@@ -47,6 +50,9 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDetail | null>(null);
 
@@ -79,6 +85,22 @@ export default function App() {
     }
   }
 
+  async function loadAIStatus() {
+    setSettingsLoading(true);
+    try {
+      setAIStatus(await fetchAIStatus());
+    } catch (err) {
+      setError("KI-Einstellungen konnten nicht geladen werden.");
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
+  function openSettings() {
+    setSettingsOpen(true);
+    void loadAIStatus();
+  }
+
   async function openDocument(document: DocumentSummary) {
     setError(null);
     try {
@@ -102,6 +124,11 @@ export default function App() {
           <Tooltip title="Neu laden">
             <IconButton onClick={() => void loadDocuments()} disabled={loading || importing}>
               <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Einstellungen">
+            <IconButton onClick={openSettings}>
+              <SettingsIcon />
             </IconButton>
           </Tooltip>
           <Button
@@ -224,6 +251,69 @@ export default function App() {
             >
               {selected?.ocr_text || "Kein OCR-Text vorhanden"}
             </Typography>
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Einstellungen</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={3}>
+            <Box>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={2}>
+                <Typography variant="h6" component="h2">
+                  KI-Anbieter
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={settingsLoading ? <CircularProgress size={16} /> : <RefreshIcon />}
+                  onClick={() => void loadAIStatus()}
+                  disabled={settingsLoading}
+                >
+                  Aktualisieren
+                </Button>
+              </Stack>
+
+              <Stack spacing={1.5} sx={{ mt: 2 }}>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip
+                    color={aiStatus?.configured_provider && aiStatus.configured_provider !== "none" ? "success" : "default"}
+                    label={`Aktiv: ${aiStatus?.configured_provider ?? "wird geladen"}`}
+                  />
+                  <Chip label={`${aiStatus?.available_providers.length ?? 0} Anbieter bereit`} />
+                </Stack>
+
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {["openai", "gemini", "anthropic"].map((provider) => {
+                    const available = aiStatus?.available_providers.includes(provider) ?? false;
+                    return (
+                      <Chip
+                        key={provider}
+                        variant={available ? "filled" : "outlined"}
+                        color={available ? "primary" : "default"}
+                        label={`${provider}${available ? " verbunden" : " nicht eingerichtet"}`}
+                      />
+                    );
+                  })}
+                </Stack>
+
+                <Alert severity="info">
+                  API-Schluessel werden aus Sicherheitsgruenden in der Datei `.env` gespeichert und nicht im Browser
+                  angezeigt.
+                </Alert>
+              </Stack>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                Anbieter wechseln
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                In `.env` `AI_PROVIDER` auf `openai`, `gemini` oder `anthropic` setzen und den passenden API-Schluessel
+                eintragen. Danach das Backend neu starten.
+              </Typography>
+            </Box>
           </Stack>
         </DialogContent>
       </Dialog>
