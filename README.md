@@ -2,7 +2,7 @@
 
 DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 0.2 erweitert das technische Fundament um eine erste KI-Extraktion fuer Forderungsdaten.
 
-## Funktionen in Version 0.1
+## Funktionen in Version 0.2
 
 - Docker-Compose-Setup fuer PostgreSQL, Backend, Frontend und optional Ollama
 - PostgreSQL-17-Schema inklusive `documents`, `creditors`, `claims`, `claim_events` und `embeddings`
