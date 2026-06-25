@@ -9,6 +9,16 @@ class Settings(BaseSettings):
     paperless_username: str | None = None
     paperless_password: str | None = None
     cors_origins: str = "http://localhost:3000"
+    ai_provider: str = "none"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4.1-mini"
+    openai_api_base_url: str = "https://api.openai.com/v1"
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-3-5-haiku-latest"
+    anthropic_api_base_url: str = "https://api.anthropic.com/v1"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
