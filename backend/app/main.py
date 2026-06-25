@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import ai, documents, extractions, imports
 from app.core.config import settings
 
-app = FastAPI(title="DebtAI", version="0.1.0")
+app = FastAPI(title="DebtAI", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
