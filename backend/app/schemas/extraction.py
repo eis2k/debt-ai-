@@ -8,7 +8,14 @@ class ClaimExtractionRequest(BaseModel):
     provider: str | None = None
 
 
+class BatchClaimExtractionRequest(BaseModel):
+    document_ids: list[int] | None = None
+    provider: str | None = None
+    limit: int = 100
+
+
 class ExtractedClaim(BaseModel):
+    has_claim: bool = False
     creditor_name: str | None = None
     previous_creditor_name: str | None = None
     amount: Decimal | None = None
@@ -35,8 +42,27 @@ class ExtractedClaim(BaseModel):
 
 class ClaimExtractionResult(BaseModel):
     document_id: int
-    claim_id: int
+    has_claim: bool = True
+    claim_id: int | None
     creditor_id: int | None
     provider: str
     model: str
     extracted: ExtractedClaim
+
+
+class BatchClaimExtractionItem(BaseModel):
+    document_id: int
+    filename: str
+    status: str
+    message: str | None = None
+    result: ClaimExtractionResult | None = None
+
+
+class BatchClaimExtractionResult(BaseModel):
+    total: int
+    processed: int
+    claims_created_or_updated: int
+    no_claim: int
+    skipped: int
+    failed: int
+    items: list[BatchClaimExtractionItem]
