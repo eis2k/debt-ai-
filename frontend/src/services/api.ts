@@ -39,8 +39,42 @@ export type ImportResult = {
 };
 
 export type AIStatus = {
+  mode: string;
   configured_provider: string;
   available_providers: string[];
+  models: Record<string, string>;
+};
+
+export type AISettings = {
+  mode: string;
+  provider: string;
+  openai_model: string;
+  openai_api_base_url: string;
+  openai_api_key_set: boolean;
+  gemini_model: string;
+  gemini_api_base_url: string;
+  gemini_api_key_set: boolean;
+  anthropic_model: string;
+  anthropic_api_base_url: string;
+  anthropic_api_key_set: boolean;
+  ollama_model: string;
+  ollama_base_url: string;
+};
+
+export type AISettingsUpdate = {
+  mode: string;
+  provider: string;
+  openai_model: string;
+  openai_api_base_url: string;
+  openai_api_key?: string | null;
+  gemini_model: string;
+  gemini_api_base_url: string;
+  gemini_api_key?: string | null;
+  anthropic_model: string;
+  anthropic_api_base_url: string;
+  anthropic_api_key?: string | null;
+  ollama_model: string;
+  ollama_base_url: string;
 };
 
 export type ExtractedClaim = {
@@ -181,6 +215,16 @@ export async function importPaperless(): Promise<ImportResult> {
 
 export async function fetchAIStatus(): Promise<AIStatus> {
   const response = await api.get<AIStatus>("/api/ai/status");
+  return response.data;
+}
+
+export async function fetchAISettings(): Promise<AISettings> {
+  const response = await api.get<AISettings>("/api/ai/settings");
+  return response.data;
+}
+
+export async function saveAISettings(payload: AISettingsUpdate): Promise<AISettings> {
+  const response = await api.put<AISettings>("/api/ai/settings", payload);
   return response.data;
 }
 
