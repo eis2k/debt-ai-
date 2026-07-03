@@ -204,6 +204,25 @@ curl -X POST http://localhost:8000/api/extractions/documents/1/claim \
   -d "{}"
 ```
 
+## Stapelverarbeitung
+
+In der Dokumentenliste kann ueber `Forderungen pruefen` die aktuell geladene
+Dokumentenliste in einem Durchlauf verarbeitet werden. DebtAI prueft jedes
+Dokument einzeln, speichert nur echte Forderungen und zaehlt Dokumente ohne
+Forderung separat. Dokumente ohne OCR-Text werden uebersprungen, einzelne Fehler
+brechen den Stapellauf nicht ab.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/extractions/claims/batch \
+  -H "Content-Type: application/json" \
+  -d "{\"document_ids\":[1,2,3],\"limit\":100}"
+```
+
+Ohne `document_ids` verarbeitet der Endpunkt die neuesten Dokumente bis zum
+angegebenen Limit.
+
 ## Quellen-Chat
 
 Im Tab `Chat` kann eine Frage zu den importierten Dokumenten gestellt werden.
