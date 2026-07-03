@@ -7,6 +7,7 @@ Create Date: 2026-06-21
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision = "0001_initial_schema"
 down_revision = None
@@ -25,6 +26,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("document_date", sa.Date(), nullable=True),
         sa.Column("document_type", sa.String(length=255), nullable=True),
+        sa.Column("tags", postgresql.JSONB(astext_type=sa.Text()), server_default=sa.text("'[]'::jsonb"), nullable=False),
         sa.Column("ocr_text", sa.Text(), nullable=True),
         sa.Column("checksum", sa.String(length=128), nullable=True),
         sa.Column("confidence_score", sa.Numeric(5, 2), nullable=True),
@@ -36,6 +38,7 @@ def upgrade() -> None:
     op.create_index("ix_documents_document_date", "documents", ["document_date"])
     op.create_index("ix_documents_document_type", "documents", ["document_type"])
     op.create_index("ix_documents_filename", "documents", ["filename"])
+    op.create_index("ix_documents_tags_gin", "documents", ["tags"], postgresql_using="gin")
     op.execute("CREATE INDEX ix_documents_ocr_text_fts ON documents USING gin (to_tsvector('german', coalesce(ocr_text, '')))")
 
     op.create_table(
