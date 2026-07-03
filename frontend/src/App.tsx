@@ -40,6 +40,7 @@ import {
   AIStatus,
   AISettings,
   AISettingsUpdate,
+  BatchClaimExtractionResult,
   ChatResponse,
   ClaimExtractionResult,
   ClaimTransferRead,
@@ -52,6 +53,7 @@ import {
   askChat,
   exportClaimsUrl,
   extractClaim,
+  extractClaimsBatch,
   fetchAIStatus,
   fetchAISettings,
   fetchComparisons,
@@ -96,7 +98,9 @@ export default function App() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [batchExtracting, setBatchExtracting] = useState(false);
   const [extractionResult, setExtractionResult] = useState<ClaimExtractionResult | null>(null);
+  const [batchResult, setBatchResult] = useState<BatchClaimExtractionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDetail | null>(null);
   const [question, setQuestion] = useState("");
@@ -282,6 +286,25 @@ export default function App() {
     }
   }
 
+  async function handleBatchExtractClaims() {
+    if (documents.length === 0) return;
+    setBatchExtracting(true);
+    setBatchResult(null);
+    setError(null);
+    try {
+      const result = await extractClaimsBatch(documents.map((document) => document.id));
+      setBatchResult(result);
+      await loadCreditors();
+      await loadContacts();
+      await loadTransfers();
+      await loadDashboard();
+    } catch (err) {
+      setError("Stapelverarbeitung ist fehlgeschlagen. Pruefe KI-Anbieter und OCR-Texte.");
+    } finally {
+      setBatchExtracting(false);
+    }
+  }
+
   async function handleChat() {
     if (!question.trim()) return;
     setChatLoading(true);
@@ -394,9 +417,25 @@ export default function App() {
             <Button variant="outlined" onClick={() => void loadDocuments()} sx={{ minWidth: 120 }}>
               Suchen
             </Button>
+            <Button
+              variant="contained"
+              onClick={() => void handleBatchExtractClaims()}
+              disabled={batchExtracting || documents.length === 0}
+              startIcon={batchExtracting ? <CircularProgress color="inherit" size={16} /> : undefined}
+              sx={{ minWidth: 190 }}
+            >
+              Forderungen pruefen
+            </Button>
             <Chip label={`${total} Dokumente`} />
           </Stack>
         </Paper>
+
+        {batchResult && (
+          <Alert severity={batchResult.failed > 0 ? "warning" : "success"}>
+            Stapelverarbeitung fertig: {batchResult.claims_created_or_updated} Forderungen gespeichert,{" "}
+            {batchResult.no_claim} ohne Forderung, {batchResult.skipped} uebersprungen, {batchResult.failed} fehlgeschlagen.
+          </Alert>
+        )}
 
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
           <Table size="small">
@@ -709,14 +748,18 @@ export default function App() {
               <Chip size="small" label={formatDate(selected?.document_date ?? null)} />
             </Stack>
             {extractionResult && (
-              <Alert severity="success">
-                Forderung gespeichert: {extractionResult.extracted.creditor_name ?? "Unbekannter Glaeubiger"}
-                {extractionResult.extracted.amount
-                  ? `, ${extractionResult.extracted.amount} ${extractionResult.extracted.currency}`
-                  : ""}
-                {extractionResult.extracted.claim_reference
-                  ? `, Aktenzeichen ${extractionResult.extracted.claim_reference}`
-                  : ""}
+              <Alert severity={extractionResult.has_claim ? "success" : "info"}>
+                {extractionResult.has_claim
+                  ? `Forderung gespeichert: ${extractionResult.extracted.creditor_name ?? "Unbekannter Glaeubiger"}${
+                      extractionResult.extracted.amount
+                        ? `, ${extractionResult.extracted.amount} ${extractionResult.extracted.currency}`
+                        : ""
+                    }${
+                      extractionResult.extracted.claim_reference
+                        ? `, Aktenzeichen ${extractionResult.extracted.claim_reference}`
+                        : ""
+                    }`
+                  : "Keine Forderung in diesem Dokument erkannt."}
               </Alert>
             )}
             <Typography
