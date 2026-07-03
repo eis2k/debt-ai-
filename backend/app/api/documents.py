@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -19,7 +19,13 @@ def list_documents(
     filters = []
     if search:
         pattern = f"%{search}%"
-        filters.append(or_(Document.filename.ilike(pattern), Document.ocr_text.ilike(pattern)))
+        filters.append(
+            or_(
+                Document.filename.ilike(pattern),
+                Document.ocr_text.ilike(pattern),
+                Document.tags.cast(String).ilike(pattern),
+            )
+        )
 
     total_query = select(func.count()).select_from(Document)
     item_query = select(Document).order_by(Document.document_date.desc().nullslast(), Document.id.desc())
