@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ClaimExtractionRequest(BaseModel):
@@ -17,6 +17,7 @@ class BatchClaimExtractionRequest(BaseModel):
 class ExtractedClaim(BaseModel):
     has_claim: bool = False
     document_category: str = "unknown"
+    document_tags: list[str] = Field(default_factory=list)
     creditor_name: str | None = None
     previous_creditor_name: str | None = None
     amount: Decimal | None = None
