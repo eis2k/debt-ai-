@@ -1,6 +1,6 @@
 # DebtAI
 
-DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 1.0 verbindet Paperless-Import, KI-Extraktion, Forderungskonsolidierung, Dashboard, Quellen-Chat und CSV-Export.
+DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 1.0 verbindet Paperless-Import, KI-Extraktion, Kontakt- und Adresserkennung, Forderungskonsolidierung, Wechselhistorie, Dashboard, Quellen-Chat und CSV-Export.
 
 ## Funktionen in Version 1.0
 
@@ -10,7 +10,9 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - Paperless-ngx-Import ueber die Paperless API
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - KI-Extraktion fuer Forderungsdaten aus OCR-Texten
-- Speicherung erkannter Glaeubiger, Forderungen und Forderungsereignisse
+- Speicherung erkannter Kontakte, Adressen, Glaeubiger, Forderungen und Forderungsereignisse
+- automatische Verknuepfung neuer Briefe mit bekannten Kontakten
+- Historie fuer Forderungswechsel von einem Glaeubiger zum naechsten
 - Glaeubigeruebersicht und konsolidierte Forderungsbetraege
 - Dashboard mit Kennzahlen und Statusverteilung
 - Vergleichsmodul fuer moegliche doppelte oder zusammengehoerige Forderungen
@@ -113,6 +115,8 @@ Die Oberflaeche ist in vier Tabs aufgeteilt:
 
 - `Dokumente`: Paperless-Import, Suche, OCR-Detailansicht und Forderungserkennung
 - `Glaeubiger`: konsolidierte Glaeubiger mit Anzahl und Summe der Forderungen
+- `Kontakte`: erkannte Absender, Adressen und automatisch verknuepfte Dokumente
+- `Wechsel`: Historie, wann eine Forderung von einem Glaeubiger zum naechsten ging
 - `Dashboard`: Kennzahlen, offene Betraege, betitelte Forderungen und Statusgruppen
 - `Vergleich`: moegliche doppelte oder zusammengehoerige Forderungen
 - `Chat`: Fragen an die importierten Dokumente mit Quellenanzeige
@@ -158,14 +162,17 @@ curl -X POST http://localhost:8000/api/import/paperless \
 
 Ein importiertes Dokument in der Dokumentenliste anklicken und im Detailfenster
 `Forderung erkennen` auswaehlen. DebtAI sendet den OCR-Text an den konfigurierten
-KI-Anbieter und speichert die erkannten Daten in den Tabellen `creditors`,
-`claims` und `claim_events`.
+KI-Anbieter und speichert die erkannten Daten in den Tabellen `contacts`,
+`document_contacts`, `creditors`, `claims`, `claim_events` und
+`claim_transfers`.
 
 Erkannt werden unter anderem:
 
 - Glaeubiger
+- Kontaktname und Adressdaten
 - Forderungsbetrag und Waehrung
 - Aktenzeichen oder Vertragsreferenz
+- vorheriger Glaeubiger beziehungsweise Forderungswechsel
 - Titelstatus
 - Dokument- oder Ereignistyp
 - relevantes Datum
@@ -173,6 +180,13 @@ Erkannt werden unter anderem:
 Die KI-Extraktion benoetigt einen konfigurierten Anbieter in `.env`. Ohne
 API-Schluessel bleibt DebtAI normal nutzbar, die Forderungserkennung meldet dann
 aber, dass kein KI-Anbieter eingerichtet ist.
+
+Wenn ein Kontakt einmal erkannt wurde, legt DebtAI einen Alias an. Beim naechsten
+Paperless-Import wird der OCR-Text gegen bekannte Aliasnamen geprueft und der
+Brief automatisch mit dem Kontakt verknuepft. Wenn ein bekanntes Aktenzeichen
+spaeter mit einem anderen Glaeubiger auftaucht, wird im Tab `Wechsel` ein
+Eintrag mit Datum, altem Glaeubiger, neuem Glaeubiger und Quelldokument
+gespeichert.
 
 Alternativ per API:
 
@@ -274,10 +288,14 @@ Die Datenbank wird beim Start automatisch vorbereitet. Alembic legt das Schema a
 Wichtige Tabellen:
 
 - `documents`: importierte Paperless-Dokumente mit OCR-Text
+- `contacts`: erkannte Kontakte und Adressdaten
+- `contact_aliases`: alternative Kontakt-Schreibweisen fuer automatische Zuordnung
+- `document_contacts`: Verknuepfung zwischen Dokumenten und Kontakten
 - `creditors`: eindeutige Glaeubiger
 - `creditor_aliases`: alternative Schreibweisen
 - `claims`: Forderungen
 - `claim_events`: Forderungshistorie
+- `claim_transfers`: Wechsel einer Forderung zwischen Glaeubigern
 - `embeddings`: Textabschnitte und spaetere Vektor-Embeddings
 
 ## Ollama
