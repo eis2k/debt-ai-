@@ -10,6 +10,7 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - Paperless-ngx-Import ueber die Paperless API
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - KI-Extraktion fuer Forderungsdaten aus OCR-Texten
+- automatische Klassifikation auch fuer Dokumente ohne Schuldbezug
 - Speicherung erkannter Kontakte, Adressen, Glaeubiger, Forderungen und Forderungsereignisse
 - automatische Verknuepfung neuer Briefe mit bekannten Kontakten
 - Historie fuer Forderungswechsel von einem Glaeubiger zum naechsten
@@ -114,6 +115,7 @@ docker compose up --build
 Die Oberflaeche ist in vier Tabs aufgeteilt:
 
 - `Dokumente`: Paperless-Import, Suche, OCR-Detailansicht und Forderungserkennung
+- `Forderungen`: zusammengefuehrte Forderungen mit Betrag, Glaeubiger, Zeitraum, Schreiben und Kurzfassung
 - `Glaeubiger`: konsolidierte Glaeubiger mit Anzahl und Summe der Forderungen
 - `Kontakte`: erkannte Absender, Adressen und automatisch verknuepfte Dokumente
 - `Wechsel`: Historie, wann eine Forderung von einem Glaeubiger zum naechsten ging
@@ -176,6 +178,7 @@ KI-Anbieter und speichert die erkannten Daten in den Tabellen `contacts`,
 
 Erkannt werden unter anderem:
 
+- Dokumentkategorie, auch wenn keine Forderung enthalten ist
 - Glaeubiger
 - Kontaktname und Adressdaten
 - Forderungsbetrag und Waehrung
@@ -189,12 +192,22 @@ Die KI-Extraktion benoetigt einen konfigurierten Anbieter in `.env`. Ohne
 API-Schluessel bleibt DebtAI normal nutzbar, die Forderungserkennung meldet dann
 aber, dass kein KI-Anbieter eingerichtet ist.
 
+Auch Dokumente ohne Schuldbezug werden verarbeitet. DebtAI speichert dann keine
+Forderung, setzt aber den Dokumenttyp, zum Beispiel `Werbung`, `Vertrag`,
+`Verwaltung`, `Zahlungsbeleg`, `Privat / ohne Schuldbezug` oder `Unbekannt`.
+
 Wenn ein Kontakt einmal erkannt wurde, legt DebtAI einen Alias an. Beim naechsten
 Paperless-Import wird der OCR-Text gegen bekannte Aliasnamen geprueft und der
 Brief automatisch mit dem Kontakt verknuepft. Wenn ein bekanntes Aktenzeichen
 spaeter mit einem anderen Glaeubiger auftaucht, wird im Tab `Wechsel` ein
 Eintrag mit Datum, altem Glaeubiger, neuem Glaeubiger und Quelldokument
 gespeichert.
+
+Mehrere Schreiben zu einer Forderung werden zusammengefuehrt, wenn Aktenzeichen,
+Vertragsreferenz oder bei fehlenden Referenzen Glaeubiger und Betrag
+zusammenpassen. Im Tab `Forderungen` zeigt DebtAI daraus eine konsolidierte
+Kurzfassung mit Glaeubiger, Betrag, Referenzen, Zeitraum, Status und Anzahl der
+zugeordneten Schreiben.
 
 Alternativ per API:
 
@@ -210,7 +223,8 @@ In der Dokumentenliste kann ueber `Forderungen pruefen` die aktuell geladene
 Dokumentenliste in einem Durchlauf verarbeitet werden. DebtAI prueft jedes
 Dokument einzeln, speichert nur echte Forderungen und zaehlt Dokumente ohne
 Forderung separat. Dokumente ohne OCR-Text werden uebersprungen, einzelne Fehler
-brechen den Stapellauf nicht ab.
+brechen den Stapellauf nicht ab. Bei Dokumenten ohne Forderung zeigt das
+Batch-Ergebnis die erkannte Kategorie an.
 
 Alternativ per API:
 
