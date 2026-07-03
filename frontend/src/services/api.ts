@@ -82,6 +82,7 @@ export type AISettingsUpdate = {
 
 export type ExtractedClaim = {
   has_claim: boolean;
+  document_category: string;
   creditor_name: string | null;
   previous_creditor_name: string | null;
   amount: string | null;
