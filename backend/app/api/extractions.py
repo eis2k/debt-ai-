@@ -97,7 +97,7 @@ def extract_claims_batch(
         if claim is None:
             no_claim_count += 1
             status = "no_claim"
-            message = "Keine Forderung erkannt."
+            message = f"Keine Forderung erkannt. Kategorie: {extracted.document_category}."
         else:
             claims_count += 1
             status = "claim"
