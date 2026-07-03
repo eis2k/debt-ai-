@@ -45,15 +45,26 @@ export type AIStatus = {
 
 export type ExtractedClaim = {
   creditor_name: string | null;
+  previous_creditor_name: string | null;
   amount: string | null;
   currency: string;
   claim_reference: string | null;
   contract_reference: string | null;
+  contact_name: string | null;
+  contact_organization: string | null;
+  contact_person: string | null;
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string | null;
+  email: string | null;
+  phone: string | null;
   title_exists: boolean;
   title_type: string | null;
   status: string;
   event_type: string;
   event_date: string | null;
+  transfer_date: string | null;
   notes: string | null;
 };
 
@@ -86,6 +97,39 @@ export type CreditorSummary = {
   claim_count: number;
   total_amount: string;
   open_amount: string;
+};
+
+export type ContactSummary = {
+  id: number;
+  display_name: string;
+  organization_name: string | null;
+  person_name: string | null;
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string;
+  email: string | null;
+  phone: string | null;
+  document_count: number;
+  creditor_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClaimTransferRead = {
+  id: number;
+  claim_id: number;
+  claim_reference: string | null;
+  contract_reference: string | null;
+  from_creditor_id: number | null;
+  from_creditor_name: string | null;
+  to_creditor_id: number | null;
+  to_creditor_name: string | null;
+  document_id: number | null;
+  document_filename: string | null;
+  transfer_date: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 export type DashboardSummary = {
@@ -152,6 +196,16 @@ export async function fetchDashboard(): Promise<DashboardSummary> {
 
 export async function fetchCreditors(): Promise<CreditorSummary[]> {
   const response = await api.get<CreditorSummary[]>("/api/creditors");
+  return response.data;
+}
+
+export async function fetchContacts(): Promise<ContactSummary[]> {
+  const response = await api.get<ContactSummary[]>("/api/contacts");
+  return response.data;
+}
+
+export async function fetchTransfers(): Promise<ClaimTransferRead[]> {
+  const response = await api.get<ClaimTransferRead[]>("/api/transfers");
   return response.data;
 }
 
