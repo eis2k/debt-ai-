@@ -24,6 +24,11 @@ def available_providers() -> list[str]:
     return providers
 
 
+def ollama_status() -> tuple[bool, str | None]:
+    detected = _detect_ollama_base_url(timeout=2)
+    return detected is not None, detected
+
+
 def configured_provider() -> str:
     mode = settings.ai_mode.lower().strip()
     if mode == "offline":
@@ -134,15 +139,38 @@ def _complete_anthropic(messages: list[AIMessage], max_tokens: int, temperature:
 
 
 def _complete_ollama(messages: list[AIMessage], max_tokens: int, temperature: float) -> tuple[str, str, str]:
+    base_url = _detect_ollama_base_url(timeout=5) or settings.ollama_base_url
     payload = {
         "model": settings.ollama_model,
         "messages": [message.model_dump() for message in messages],
         "stream": False,
         "options": {"num_predict": max_tokens, "temperature": temperature},
     }
-    data = _post_json(f"{settings.ollama_base_url.rstrip('/')}/api/chat", json=payload)
+    data = _post_json(f"{base_url.rstrip('/')}/api/chat", json=payload)
     content = data.get("message", {}).get("content", "")
     return "ollama", settings.ollama_model, content
+
+
+def _detect_ollama_base_url(timeout: int = 2) -> str | None:
+    candidates = [
+        settings.ollama_base_url,
+        "http://host.docker.internal:11434",
+        "http://localhost:11434",
+        "http://ollama:11434",
+    ]
+    seen: set[str] = set()
+    for candidate in candidates:
+        base_url = candidate.rstrip("/")
+        if not base_url or base_url in seen:
+            continue
+        seen.add(base_url)
+        try:
+            response = requests.get(f"{base_url}/api/tags", timeout=timeout)
+        except requests.RequestException:
+            continue
+        if response.status_code < 400:
+            return base_url
+    return None
 
 
 def _system_instruction(messages: list[AIMessage]) -> str:
