@@ -8,10 +8,12 @@ class Creditor(Base):
     __tablename__ = "creditors"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    contact_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id", ondelete="SET NULL"))
     canonical_name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     notes: Mapped[str | None] = mapped_column(Text)
 
+    contact = relationship("Contact", back_populates="creditors")
     aliases = relationship("CreditorAlias", back_populates="creditor", cascade="all, delete-orphan")
     claims = relationship("Claim", back_populates="creditor")
 

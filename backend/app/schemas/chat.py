@@ -1,0 +1,19 @@
+from pydantic import BaseModel, Field
+
+
+class ChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    provider: str | None = None
+
+
+class ChatSource(BaseModel):
+    document_id: int
+    filename: str
+    snippet: str
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    provider: str
+    model: str
+    sources: list[ChatSource]

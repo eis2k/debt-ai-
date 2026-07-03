@@ -1,3 +1,4 @@
+import DownloadIcon from "@mui/icons-material/Download";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -17,12 +18,14 @@ import {
   InputAdornment,
   Paper,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Toolbar,
   Tooltip,
@@ -30,22 +33,44 @@ import {
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import {
+  AIStatus,
+  ChatResponse,
+  ClaimExtractionResult,
+  ComparisonGroup,
+  CreditorSummary,
+  DashboardSummary,
   DocumentDetail,
   DocumentSummary,
-  AIStatus,
+  askChat,
+  exportClaimsUrl,
+  extractClaim,
   fetchAIStatus,
+  fetchComparisons,
+  fetchCreditors,
+  fetchDashboard,
   fetchDocument,
   fetchDocuments,
   importPaperless,
 } from "./services/api";
+
+type View = "documents" | "creditors" | "dashboard" | "comparison" | "chat";
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
   return new Intl.DateTimeFormat("de-DE").format(new Date(value));
 }
 
+function formatMoney(value: string | number | null | undefined, currency = "EUR"): string {
+  const numberValue = Number(value ?? 0);
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(numberValue);
+}
+
 export default function App() {
+  const [view, setView] = useState<View>("documents");
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
+  const [creditors, setCreditors] = useState<CreditorSummary[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [comparisons, setComparisons] = useState<ComparisonGroup[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,8 +78,13 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<ClaimExtractionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDetail | null>(null);
+  const [question, setQuestion] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatResponse, setChatResponse] = useState<ChatResponse | null>(null);
 
   const hasDocuments = useMemo(() => documents.length > 0, [documents]);
 
@@ -70,6 +100,49 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadCreditors() {
+    setLoading(true);
+    setError(null);
+    try {
+      setCreditors(await fetchCreditors());
+    } catch (err) {
+      setError("Glaeubiger konnten nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadDashboard() {
+    setLoading(true);
+    setError(null);
+    try {
+      setDashboard(await fetchDashboard());
+    } catch (err) {
+      setError("Dashboard konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadComparisons() {
+    setLoading(true);
+    setError(null);
+    try {
+      setComparisons(await fetchComparisons());
+    } catch (err) {
+      setError("Vergleich konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshCurrentView(nextView = view) {
+    if (nextView === "documents") await loadDocuments();
+    if (nextView === "creditors") await loadCreditors();
+    if (nextView === "dashboard") await loadDashboard();
+    if (nextView === "comparison") await loadComparisons();
   }
 
   async function handleImport() {
@@ -103,6 +176,7 @@ export default function App() {
 
   async function openDocument(document: DocumentSummary) {
     setError(null);
+    setExtractionResult(null);
     try {
       setSelected(await fetchDocument(document.id));
     } catch (err) {
@@ -110,8 +184,45 @@ export default function App() {
     }
   }
 
+  async function handleExtractClaim() {
+    if (!selected) return;
+    setExtracting(true);
+    setError(null);
+    try {
+      setExtractionResult(await extractClaim(selected.id));
+      await loadCreditors();
+      await loadDashboard();
+      await loadComparisons();
+    } catch (err) {
+      setError("Forderung konnte nicht erkannt werden. Pruefe KI-Anbieter und OCR-Text.");
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  async function handleChat() {
+    if (!question.trim()) return;
+    setChatLoading(true);
+    setError(null);
+    try {
+      setChatResponse(await askChat(question.trim()));
+    } catch (err) {
+      setError("Chat konnte nicht antworten. Pruefe KI-Anbieter und Dokumente.");
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
+  function changeView(nextView: View) {
+    setView(nextView);
+    void refreshCurrentView(nextView);
+  }
+
   useEffect(() => {
     void loadDocuments("");
+    void loadCreditors();
+    void loadDashboard();
+    void loadComparisons();
   }, []);
 
   return (
@@ -121,8 +232,13 @@ export default function App() {
           <Typography variant="h6" component="h1" sx={{ flexGrow: 1, fontWeight: 700 }}>
             DebtAI
           </Typography>
+          <Tooltip title="Export">
+            <IconButton component="a" href={exportClaimsUrl()}>
+              <DownloadIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Neu laden">
-            <IconButton onClick={() => void loadDocuments()} disabled={loading || importing}>
+            <IconButton onClick={() => void refreshCurrentView()} disabled={loading || importing}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>
@@ -140,94 +256,284 @@ export default function App() {
             Paperless importieren
           </Button>
         </Toolbar>
+        <Tabs value={view} onChange={(_, value) => changeView(value)} sx={{ px: 3 }}>
+          <Tab value="documents" label="Dokumente" />
+          <Tab value="creditors" label="Glaeubiger" />
+          <Tab value="dashboard" label="Dashboard" />
+          <Tab value="comparison" label="Vergleich" />
+          <Tab value="chat" label="Chat" />
+        </Tabs>
       </AppBar>
 
       <Container maxWidth="xl" sx={{ py: 3 }}>
         <Stack spacing={2}>
           {error && <Alert severity="error">{error}</Alert>}
-
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
-              <TextField
-                fullWidth
-                size="small"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void loadDocuments();
-                }}
-                placeholder="Suche"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Button variant="outlined" onClick={() => void loadDocuments()} sx={{ minWidth: 120 }}>
-                Suchen
-              </Button>
-              <Chip label={`${total} Dokumente`} />
-            </Stack>
-          </Paper>
-
-          <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Datei</TableCell>
-                  <TableCell>Typ</TableCell>
-                  <TableCell>Datum</TableCell>
-                  <TableCell>Paperless-ID</TableCell>
-                  <TableCell>Importiert</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading && (
-                  <TableRow>
-                    <TableCell colSpan={5}>
-                      <Stack direction="row" gap={1} alignItems="center" sx={{ py: 2 }}>
-                        <CircularProgress size={20} />
-                        <Typography variant="body2">Laedt</Typography>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                )}
-
-                {!loading && !hasDocuments && (
-                  <TableRow>
-                    <TableCell colSpan={5}>
-                      <Typography variant="body2" sx={{ py: 2 }}>
-                        Keine Dokumente
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-
-                {!loading &&
-                  documents.map((document) => (
-                    <TableRow
-                      hover
-                      key={document.id}
-                      onClick={() => void openDocument(document)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <TableCell>{document.filename}</TableCell>
-                      <TableCell>{document.document_type ?? "-"}</TableCell>
-                      <TableCell>{formatDate(document.document_date)}</TableCell>
-                      <TableCell>{document.paperless_id}</TableCell>
-                      <TableCell>{formatDate(document.imported_at)}</TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          {view === "documents" && renderDocuments()}
+          {view === "creditors" && renderCreditors()}
+          {view === "dashboard" && renderDashboard()}
+          {view === "comparison" && renderComparison()}
+          {view === "chat" && renderChat()}
         </Stack>
       </Container>
 
+      {renderDocumentDialog()}
+      {renderSettingsDialog()}
+    </Box>
+  );
+
+  function renderDocuments() {
+    return (
+      <>
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
+            <TextField
+              fullWidth
+              size="small"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void loadDocuments();
+              }}
+              placeholder="Suche"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Button variant="outlined" onClick={() => void loadDocuments()} sx={{ minWidth: 120 }}>
+              Suchen
+            </Button>
+            <Chip label={`${total} Dokumente`} />
+          </Stack>
+        </Paper>
+
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Datei</TableCell>
+                <TableCell>Typ</TableCell>
+                <TableCell>Datum</TableCell>
+                <TableCell>Paperless-ID</TableCell>
+                <TableCell>Importiert</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading && loadingRow(5)}
+              {!loading && !hasDocuments && emptyRow(5, "Keine Dokumente")}
+              {!loading &&
+                documents.map((document) => (
+                  <TableRow
+                    hover
+                    key={document.id}
+                    onClick={() => void openDocument(document)}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell>{document.filename}</TableCell>
+                    <TableCell>{document.document_type ?? "-"}</TableCell>
+                    <TableCell>{formatDate(document.document_date)}</TableCell>
+                    <TableCell>{document.paperless_id}</TableCell>
+                    <TableCell>{formatDate(document.imported_at)}</TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </>
+    );
+  }
+
+  function renderCreditors() {
+    return (
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Glaeubiger</TableCell>
+              <TableCell>Forderungen</TableCell>
+              <TableCell>Offen</TableCell>
+              <TableCell>Gesamt</TableCell>
+              <TableCell>Status</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading && loadingRow(5)}
+            {!loading && creditors.length === 0 && emptyRow(5, "Keine Glaeubiger")}
+            {!loading &&
+              creditors.map((creditor) => (
+                <TableRow hover key={creditor.id}>
+                  <TableCell>{creditor.canonical_name}</TableCell>
+                  <TableCell>{creditor.claim_count}</TableCell>
+                  <TableCell>{formatMoney(creditor.open_amount)}</TableCell>
+                  <TableCell>{formatMoney(creditor.total_amount)}</TableCell>
+                  <TableCell>
+                    <Chip size="small" label={creditor.active ? "aktiv" : "inaktiv"} />
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  }
+
+  function renderDashboard() {
+    return (
+      <Stack spacing={2}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          {metric("Dokumente", dashboard?.document_count ?? 0)}
+          {metric("Glaeubiger", dashboard?.creditor_count ?? 0)}
+          {metric("Forderungen", dashboard?.claim_count ?? 0)}
+          {metric("Offen", formatMoney(dashboard?.open_claim_amount))}
+          {metric("Betitelt", dashboard?.titled_claim_count ?? 0)}
+        </Stack>
+        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Status</TableCell>
+                <TableCell>Anzahl</TableCell>
+                <TableCell>Betrag</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading && loadingRow(3)}
+              {!loading && (dashboard?.status_buckets.length ?? 0) === 0 && emptyRow(3, "Keine Forderungen")}
+              {!loading &&
+                dashboard?.status_buckets.map((bucket) => (
+                  <TableRow key={bucket.status}>
+                    <TableCell>{bucket.status}</TableCell>
+                    <TableCell>{bucket.count}</TableCell>
+                    <TableCell>{formatMoney(bucket.amount)}</TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Stack>
+    );
+  }
+
+  function renderComparison() {
+    return (
+      <Stack spacing={2}>
+        {loading && (
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <CircularProgress size={20} />
+              <Typography variant="body2">Laedt</Typography>
+            </Stack>
+          </Paper>
+        )}
+        {!loading && comparisons.length === 0 && (
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Typography variant="body2">Keine moeglichen Doppelungen oder Vergleichstreffer</Typography>
+          </Paper>
+        )}
+        {!loading &&
+          comparisons.map((group, index) => (
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }} key={`${group.reason}-${index}`}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell colSpan={5}>{group.reason}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Glaeubiger</TableCell>
+                    <TableCell>Betrag</TableCell>
+                    <TableCell>Aktenzeichen</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {group.items.map((item) => (
+                    <TableRow key={item.claim_id}>
+                      <TableCell>{item.claim_id}</TableCell>
+                      <TableCell>{item.creditor ?? "-"}</TableCell>
+                      <TableCell>{formatMoney(item.amount, item.currency)}</TableCell>
+                      <TableCell>{item.claim_reference ?? item.contract_reference ?? "-"}</TableCell>
+                      <TableCell>{item.status}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ))}
+      </Stack>
+    );
+  }
+
+  function renderChat() {
+    return (
+      <Stack spacing={2}>
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+          <Stack spacing={2}>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Frage zu deinen Dokumenten"
+            />
+            <Button
+              variant="contained"
+              onClick={() => void handleChat()}
+              disabled={chatLoading || !question.trim()}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              {chatLoading ? "Frage laeuft" : "Fragen"}
+            </Button>
+          </Stack>
+        </Paper>
+        {chatResponse && (
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Stack spacing={2}>
+              <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
+                {chatResponse.answer}
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Chip size="small" label={`${chatResponse.provider} / ${chatResponse.model}`} />
+                <Chip size="small" label={`${chatResponse.sources.length} Quellen`} />
+              </Stack>
+              {chatResponse.sources.map((source) => (
+                <Box key={source.document_id}>
+                  <Typography variant="subtitle2">{source.filename}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {source.snippet}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Paper>
+        )}
+      </Stack>
+    );
+  }
+
+  function renderDocumentDialog() {
+    return (
       <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} fullWidth maxWidth="md">
-        <DialogTitle>{selected?.filename}</DialogTitle>
+        <DialogTitle>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+            <Typography variant="h6" component="span" sx={{ flexGrow: 1 }}>
+              {selected?.filename}
+            </Typography>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => void handleExtractClaim()}
+              disabled={!selected?.ocr_text || extracting}
+              startIcon={extracting ? <CircularProgress color="inherit" size={16} /> : undefined}
+            >
+              Forderung erkennen
+            </Button>
+          </Stack>
+        </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>
             <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -235,6 +541,17 @@ export default function App() {
               <Chip size="small" label={selected?.document_type ?? "Ohne Typ"} />
               <Chip size="small" label={formatDate(selected?.document_date ?? null)} />
             </Stack>
+            {extractionResult && (
+              <Alert severity="success">
+                Forderung gespeichert: {extractionResult.extracted.creditor_name ?? "Unbekannter Glaeubiger"}
+                {extractionResult.extracted.amount
+                  ? `, ${extractionResult.extracted.amount} ${extractionResult.extracted.currency}`
+                  : ""}
+                {extractionResult.extracted.claim_reference
+                  ? `, Aktenzeichen ${extractionResult.extracted.claim_reference}`
+                  : ""}
+              </Alert>
+            )}
             <Typography
               component="pre"
               variant="body2"
@@ -254,7 +571,11 @@ export default function App() {
           </Stack>
         </DialogContent>
       </Dialog>
+    );
+  }
 
+  function renderSettingsDialog() {
+    return (
       <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>Einstellungen</DialogTitle>
         <DialogContent dividers>
@@ -274,7 +595,6 @@ export default function App() {
                   Aktualisieren
                 </Button>
               </Stack>
-
               <Stack spacing={1.5} sx={{ mt: 2 }}>
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   <Chip
@@ -283,7 +603,6 @@ export default function App() {
                   />
                   <Chip label={`${aiStatus?.available_providers.length ?? 0} Anbieter bereit`} />
                 </Stack>
-
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {["openai", "gemini", "anthropic"].map((provider) => {
                     const available = aiStatus?.available_providers.includes(provider) ?? false;
@@ -297,14 +616,12 @@ export default function App() {
                     );
                   })}
                 </Stack>
-
                 <Alert severity="info">
                   API-Schluessel werden aus Sicherheitsgruenden in der Datei `.env` gespeichert und nicht im Browser
                   angezeigt.
                 </Alert>
               </Stack>
             </Box>
-
             <Box>
               <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
                 Anbieter wechseln
@@ -317,6 +634,44 @@ export default function App() {
           </Stack>
         </DialogContent>
       </Dialog>
-    </Box>
+    );
+  }
+}
+
+function metric(label: string, value: string | number) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 1, flex: 1, minWidth: 160 }}>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="h5" sx={{ fontWeight: 700 }}>
+        {value}
+      </Typography>
+    </Paper>
+  );
+}
+
+function loadingRow(colSpan: number) {
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan}>
+        <Stack direction="row" gap={1} alignItems="center" sx={{ py: 2 }}>
+          <CircularProgress size={20} />
+          <Typography variant="body2">Laedt</Typography>
+        </Stack>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function emptyRow(colSpan: number, label: string) {
+  return (
+    <TableRow>
+      <TableCell colSpan={colSpan}>
+        <Typography variant="body2" sx={{ py: 2 }}>
+          {label}
+        </Typography>
+      </TableCell>
+    </TableRow>
   );
 }

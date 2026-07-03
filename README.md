@@ -1,14 +1,21 @@
 # DebtAI
 
-DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 0.1 liefert das technische Fundament: Docker Compose, PostgreSQL mit pgvector, FastAPI-Backend, Paperless-Import und eine Dokumentenliste.
+DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 1.0 verbindet Paperless-Import, KI-Extraktion, Forderungskonsolidierung, Dashboard, Quellen-Chat und CSV-Export.
 
-## Funktionen in Version 0.1
+## Funktionen in Version 1.0
 
 - Docker-Compose-Setup fuer PostgreSQL, Backend, Frontend und optional Ollama
 - PostgreSQL-17-Schema inklusive `documents`, `creditors`, `claims`, `claim_events` und `embeddings`
 - pgvector-Aktivierung fuer spaetere semantische Suche
 - Paperless-ngx-Import ueber die Paperless API
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
+- KI-Extraktion fuer Forderungsdaten aus OCR-Texten
+- Speicherung erkannter Glaeubiger, Forderungen und Forderungsereignisse
+- Glaeubigeruebersicht und konsolidierte Forderungsbetraege
+- Dashboard mit Kennzahlen und Statusverteilung
+- Vergleichsmodul fuer moegliche doppelte oder zusammengehoerige Forderungen
+- Quellen-Chat ueber importierte Dokumente
+- CSV-Export der Forderungen
 - Dokumentenliste mit Suche und OCR-Detailansicht
 - README mit lokaler Installation
 
@@ -22,6 +29,13 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 Eine lokale Paperless-ngx-Installation mit Redis und PostgreSQL ist im Ordner
 `paperless` vorbereitet. Paperless verwendet Port `8001`, weil das DebtAI-Backend
 bereits Port `8000` belegt.
+
+Paperless nutzt lokale Ordner auf `D:\paperless`:
+
+- `D:\paperless\data`
+- `D:\paperless\media`
+- `D:\paperless\export`
+- `D:\paperless\consume`
 
 Paperless starten:
 
@@ -37,10 +51,10 @@ docker compose exec webserver createsuperuser
 ```
 
 Danach Paperless unter http://localhost:8001 oeffnen. Dokumente koennen in den
-Ordner `paperless/consume` kopiert werden; Paperless importiert sie automatisch.
+Ordner `D:\paperless\consume` kopiert werden; Paperless importiert sie automatisch.
 
-Die Daten liegen in Docker-Volumes. Ein Export kann in Paperless erstellt und
-im Ordner `paperless/export` abgelegt werden.
+Die Paperless-Daten und Dokumente liegen in den lokalen Ordnern auf `D:\paperless`.
+PostgreSQL und Redis verwenden weiterhin Docker-Volumes.
 
 Paperless stoppen:
 
@@ -93,6 +107,33 @@ docker compose up --build
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000/docs
 
+## Arbeitsbereiche
+
+Die Oberflaeche ist in vier Tabs aufgeteilt:
+
+- `Dokumente`: Paperless-Import, Suche, OCR-Detailansicht und Forderungserkennung
+- `Glaeubiger`: konsolidierte Glaeubiger mit Anzahl und Summe der Forderungen
+- `Dashboard`: Kennzahlen, offene Betraege, betitelte Forderungen und Statusgruppen
+- `Vergleich`: moegliche doppelte oder zusammengehoerige Forderungen
+- `Chat`: Fragen an die importierten Dokumente mit Quellenanzeige
+
+Oben rechts kann ueber das Download-Symbol ein CSV-Export der Forderungen
+geladen werden.
+
+## Einstellungen in der Oberflaeche
+
+In der DebtAI-Oberflaeche befindet sich oben rechts ein Zahnrad-Symbol. Darueber
+oeffnet sich das Einstellungsmenue.
+
+Das Menue zeigt:
+
+- welcher KI-Anbieter aktiv ist
+- ob OpenAI, Gemini oder Claude technisch verbunden sind
+- wie viele Anbieter einsatzbereit sind
+
+API-Schluessel werden aus Sicherheitsgruenden nicht im Browser angezeigt. Sie
+liegen in der lokalen `.env`-Datei und werden vom Backend geladen.
+
 ## Paperless importieren
 
 Im Frontend auf `Paperless importieren` klicken.
@@ -111,6 +152,70 @@ Optional kann die Anzahl fuer einen Testlauf begrenzt werden:
 curl -X POST http://localhost:8000/api/import/paperless \
   -H "Content-Type: application/json" \
   -d "{\"limit\": 25}"
+```
+
+## Forderung erkennen
+
+Ein importiertes Dokument in der Dokumentenliste anklicken und im Detailfenster
+`Forderung erkennen` auswaehlen. DebtAI sendet den OCR-Text an den konfigurierten
+KI-Anbieter und speichert die erkannten Daten in den Tabellen `creditors`,
+`claims` und `claim_events`.
+
+Erkannt werden unter anderem:
+
+- Glaeubiger
+- Forderungsbetrag und Waehrung
+- Aktenzeichen oder Vertragsreferenz
+- Titelstatus
+- Dokument- oder Ereignistyp
+- relevantes Datum
+
+Die KI-Extraktion benoetigt einen konfigurierten Anbieter in `.env`. Ohne
+API-Schluessel bleibt DebtAI normal nutzbar, die Forderungserkennung meldet dann
+aber, dass kein KI-Anbieter eingerichtet ist.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/extractions/documents/1/claim \
+  -H "Content-Type: application/json" \
+  -d "{}"
+```
+
+## Quellen-Chat
+
+Im Tab `Chat` kann eine Frage zu den importierten Dokumenten gestellt werden.
+DebtAI sucht passende OCR-Texte, uebergibt kurze Quellen-Auschnitte an den
+konfigurierten KI-Anbieter und zeigt Antwort plus Quellen an.
+
+Der Chat benoetigt wie die Forderungserkennung einen konfigurierten KI-Anbieter.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"question\":\"Welche Forderungen sind offen?\"}"
+```
+
+## Export
+
+Forderungen koennen als CSV exportiert werden:
+
+```bash
+curl http://localhost:8000/api/exports/claims.csv
+```
+
+## Vergleich
+
+Das Vergleichsmodul sucht nach moeglichen Doppelungen oder zusammengehoerigen
+Forderungen. Verglichen werden aktuell gleiche Aktenzeichen sowie gleiche
+Kombinationen aus Glaeubiger und Betrag.
+
+Alternativ per API:
+
+```bash
+curl http://localhost:8000/api/comparisons/claims
 ```
 
 ## KI-Anbieter anschliessen
@@ -204,10 +309,10 @@ npm install
 npm run dev
 ```
 
-## Roadmap
+## Roadmap-Status
 
-- Version 0.2: KI-Extraktion und Forderungserkennung
-- Version 0.3: Konsolidierung und Glaeubigeruebersicht
-- Version 0.4: Dashboard
-- Version 0.5: KI-Chat mit Quellen
-- Version 1.0: Vergleichsmodul und Exportfunktionen
+- Version 0.2: KI-Extraktion und Forderungserkennung umgesetzt
+- Version 0.3: Konsolidierung und Glaeubigeruebersicht umgesetzt
+- Version 0.4: Dashboard umgesetzt
+- Version 0.5: KI-Chat mit Quellen umgesetzt
+- Version 1.0: Vergleichsmodul und Exportfunktionen umgesetzt

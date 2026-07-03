@@ -24,18 +24,15 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - data:/usr/src/paperless/data
-      - media:/usr/src/paperless/media
-      - ./export:/usr/src/paperless/export
-      - ./consume:/usr/src/paperless/consume
+      - D:/paperless/data:/usr/src/paperless/data
+      - D:/paperless/media:/usr/src/paperless/media
+      - D:/paperless/export:/usr/src/paperless/export
+      - D:/paperless/consume:/usr/src/paperless/consume
     env_file: paperless.env
     environment:
       PAPERLESS_REDIS: redis://broker:6379
       PAPERLESS_DBHOST: db
 
 volumes:
-  data:
-  media:
   pgdata:
   redisdata:
-
