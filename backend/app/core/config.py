@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     paperless_username: str | None = None
     paperless_password: str | None = None
     cors_origins: str = "http://localhost:3000"
+    ai_mode: str = "none"
     ai_provider: str = "none"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
@@ -19,6 +20,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-3-5-haiku-latest"
     anthropic_api_base_url: str = "https://api.anthropic.com/v1"
+    ollama_base_url: str = "http://ollama:11434"
+    ollama_model: str = "qwen3:14b"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -28,3 +31,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def reload_settings() -> Settings:
+    fresh = Settings()
+    for key, value in fresh.model_dump().items():
+        setattr(settings, key, value)
+    return settings
