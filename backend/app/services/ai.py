@@ -12,6 +12,9 @@ class AIProviderError(RuntimeError):
 
 def available_providers() -> list[str]:
     providers: list[str] = []
+    if settings.ai_mode == "offline":
+        providers.append("ollama")
+        return providers
     if settings.openai_api_key:
         providers.append("openai")
     if settings.gemini_api_key:
@@ -22,6 +25,11 @@ def available_providers() -> list[str]:
 
 
 def configured_provider() -> str:
+    mode = settings.ai_mode.lower().strip()
+    if mode == "offline":
+        return "ollama"
+    if mode == "none":
+        return "none"
     configured = settings.ai_provider.lower().strip()
     if configured != "none":
         return configured
@@ -42,6 +50,8 @@ def complete(
         return _complete_gemini(messages, max_tokens=max_tokens, temperature=temperature)
     if selected in {"anthropic", "claude"}:
         return _complete_anthropic(messages, max_tokens=max_tokens, temperature=temperature)
+    if selected == "ollama":
+        return _complete_ollama(messages, max_tokens=max_tokens, temperature=temperature)
     raise AIProviderError("No AI provider is configured.")
 
 
@@ -121,6 +131,18 @@ def _complete_anthropic(messages: list[AIMessage], max_tokens: int, temperature:
     )
     content = "".join(block.get("text", "") for block in data.get("content", []) if block.get("type") == "text")
     return "anthropic", settings.anthropic_model, content
+
+
+def _complete_ollama(messages: list[AIMessage], max_tokens: int, temperature: float) -> tuple[str, str, str]:
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [message.model_dump() for message in messages],
+        "stream": False,
+        "options": {"num_predict": max_tokens, "temperature": temperature},
+    }
+    data = _post_json(f"{settings.ollama_base_url.rstrip('/')}/api/chat", json=payload)
+    content = data.get("message", {}).get("content", "")
+    return "ollama", settings.ollama_model, content
 
 
 def _system_instruction(messages: list[AIMessage]) -> str:
