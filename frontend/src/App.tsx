@@ -14,8 +14,10 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   InputAdornment,
+  MenuItem,
   Paper,
   Stack,
   Tab,
@@ -34,6 +36,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   AIStatus,
+  AISettings,
+  AISettingsUpdate,
   ChatResponse,
   ClaimExtractionResult,
   ClaimTransferRead,
@@ -47,6 +51,7 @@ import {
   exportClaimsUrl,
   extractClaim,
   fetchAIStatus,
+  fetchAISettings,
   fetchComparisons,
   fetchContacts,
   fetchCreditors,
@@ -55,6 +60,7 @@ import {
   fetchDocuments,
   fetchTransfers,
   importPaperless,
+  saveAISettings,
 } from "./services/api";
 
 type View = "documents" | "creditors" | "contacts" | "transfers" | "dashboard" | "comparison" | "chat";
@@ -83,7 +89,10 @@ export default function App() {
   const [importing, setImporting] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
+  const [aiSettings, setAISettings] = useState<AISettings | null>(null);
+  const [aiSecrets, setAISecrets] = useState({ openai: "", gemini: "", anthropic: "" });
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [extractionResult, setExtractionResult] = useState<ClaimExtractionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -193,12 +202,50 @@ export default function App() {
   async function loadAIStatus() {
     setSettingsLoading(true);
     try {
-      setAIStatus(await fetchAIStatus());
+      const [status, settings] = await Promise.all([fetchAIStatus(), fetchAISettings()]);
+      setAIStatus(status);
+      setAISettings(settings);
+      setAISecrets({ openai: "", gemini: "", anthropic: "" });
     } catch (err) {
       setError("KI-Einstellungen konnten nicht geladen werden.");
     } finally {
       setSettingsLoading(false);
     }
+  }
+
+  async function handleSaveAISettings() {
+    if (!aiSettings) return;
+    setSettingsSaving(true);
+    setError(null);
+    try {
+      const payload: AISettingsUpdate = {
+        mode: aiSettings.mode,
+        provider: aiSettings.provider,
+        openai_model: aiSettings.openai_model,
+        openai_api_base_url: aiSettings.openai_api_base_url,
+        openai_api_key: aiSecrets.openai || null,
+        gemini_model: aiSettings.gemini_model,
+        gemini_api_base_url: aiSettings.gemini_api_base_url,
+        gemini_api_key: aiSecrets.gemini || null,
+        anthropic_model: aiSettings.anthropic_model,
+        anthropic_api_base_url: aiSettings.anthropic_api_base_url,
+        anthropic_api_key: aiSecrets.anthropic || null,
+        ollama_model: aiSettings.ollama_model,
+        ollama_base_url: aiSettings.ollama_base_url,
+      };
+      const saved = await saveAISettings(payload);
+      setAISettings(saved);
+      setAISecrets({ openai: "", gemini: "", anthropic: "" });
+      setAIStatus(await fetchAIStatus());
+    } catch (err) {
+      setError("KI-Einstellungen konnten nicht gespeichert werden.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  function patchAISettings(patch: Partial<AISettings>) {
+    setAISettings((current) => (current ? { ...current, ...patch } : current));
   }
 
   function openSettings() {
@@ -693,8 +740,11 @@ export default function App() {
   }
 
   function renderSettingsDialog() {
+    const mode = aiSettings?.mode ?? "none";
+    const onlineDisabled = mode !== "online";
+    const offlineDisabled = mode !== "offline";
     return (
-      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} fullWidth maxWidth="md">
         <DialogTitle>Einstellungen</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={3}>
@@ -713,45 +763,164 @@ export default function App() {
                   Aktualisieren
                 </Button>
               </Stack>
-              <Stack spacing={1.5} sx={{ mt: 2 }}>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip
-                    color={aiStatus?.configured_provider && aiStatus.configured_provider !== "none" ? "success" : "default"}
-                    label={`Aktiv: ${aiStatus?.configured_provider ?? "wird geladen"}`}
-                  />
-                  <Chip label={`${aiStatus?.available_providers.length ?? 0} Anbieter bereit`} />
-                </Stack>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  {["openai", "gemini", "anthropic"].map((provider) => {
-                    const available = aiStatus?.available_providers.includes(provider) ?? false;
-                    return (
-                      <Chip
-                        key={provider}
-                        variant={available ? "filled" : "outlined"}
-                        color={available ? "primary" : "default"}
-                        label={`${provider}${available ? " verbunden" : " nicht eingerichtet"}`}
-                      />
-                    );
-                  })}
-                </Stack>
-                <Alert severity="info">
-                  API-Schluessel werden aus Sicherheitsgruenden in der Datei `.env` gespeichert und nicht im Browser
-                  angezeigt.
-                </Alert>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
+                <Chip
+                  color={aiStatus?.configured_provider && aiStatus.configured_provider !== "none" ? "success" : "default"}
+                  label={`Aktiv: ${aiStatus?.configured_provider ?? "wird geladen"}`}
+                />
+                <Chip label={`Modus: ${aiStatus?.mode ?? mode}`} />
+                <Chip label={`${aiStatus?.available_providers.length ?? 0} Anbieter bereit`} />
               </Stack>
             </Box>
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                Anbieter wechseln
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                In `.env` `AI_PROVIDER` auf `openai`, `gemini` oder `anthropic` setzen und den passenden API-Schluessel
-                eintragen. Danach das Backend neu starten.
-              </Typography>
-            </Box>
+
+            {settingsLoading && (
+              <Stack direction="row" gap={1} alignItems="center">
+                <CircularProgress size={20} />
+                <Typography variant="body2">Laedt Einstellungen</Typography>
+              </Stack>
+            )}
+
+            {aiSettings && (
+              <>
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                    Betriebsart
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <Button
+                      variant={mode === "offline" ? "contained" : "outlined"}
+                      onClick={() => patchAISettings({ mode: "offline", provider: "none" })}
+                    >
+                      Lokal mit Ollama
+                    </Button>
+                    <Button
+                      variant={mode === "online" ? "contained" : "outlined"}
+                      onClick={() => patchAISettings({ mode: "online", provider: aiSettings.provider === "none" ? "openai" : aiSettings.provider })}
+                    >
+                      Online-Anbieter
+                    </Button>
+                    <Button variant={mode === "none" ? "contained" : "outlined"} onClick={() => patchAISettings({ mode: "none", provider: "none" })}>
+                      Aus
+                    </Button>
+                  </Stack>
+                </Box>
+
+                <Divider />
+
+                <Box sx={{ opacity: offlineDisabled ? 0.45 : 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                    Lokale KI
+                  </Typography>
+                  <Stack spacing={2}>
+                    <TextField
+                      label="Ollama Modell"
+                      value={aiSettings.ollama_model}
+                      disabled={offlineDisabled}
+                      onChange={(event) => patchAISettings({ ollama_model: event.target.value })}
+                      helperText="Beispiel: qwen3:14b, llama3.1:8b oder mistral"
+                    />
+                    <TextField
+                      label="Ollama Adresse"
+                      value={aiSettings.ollama_base_url}
+                      disabled={offlineDisabled}
+                      onChange={(event) => patchAISettings({ ollama_base_url: event.target.value })}
+                      helperText="Im Docker-Netz meist http://ollama:11434"
+                    />
+                  </Stack>
+                </Box>
+
+                <Divider />
+
+                <Box sx={{ opacity: onlineDisabled ? 0.45 : 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+                    Online-KI
+                  </Typography>
+                  <Stack spacing={2}>
+                    <TextField
+                      select
+                      label="Anbieter"
+                      value={aiSettings.provider}
+                      disabled={onlineDisabled}
+                      onChange={(event) => patchAISettings({ provider: event.target.value })}
+                    >
+                      <MenuItem value="openai">OpenAI</MenuItem>
+                      <MenuItem value="gemini">Gemini</MenuItem>
+                      <MenuItem value="anthropic">Claude / Anthropic</MenuItem>
+                    </TextField>
+
+                    {renderProviderFields("openai", "OpenAI", aiSettings.openai_api_key_set, aiSettings.openai_model, aiSettings.openai_api_base_url, onlineDisabled || aiSettings.provider !== "openai")}
+                    {renderProviderFields("gemini", "Gemini", aiSettings.gemini_api_key_set, aiSettings.gemini_model, aiSettings.gemini_api_base_url, onlineDisabled || aiSettings.provider !== "gemini")}
+                    {renderProviderFields("anthropic", "Claude / Anthropic", aiSettings.anthropic_api_key_set, aiSettings.anthropic_model, aiSettings.anthropic_api_base_url, onlineDisabled || aiSettings.provider !== "anthropic")}
+                  </Stack>
+                </Box>
+
+                <Alert severity="info">
+                  API-Schluessel werden gespeichert, aber nicht wieder angezeigt. Leere Schluessel-Felder behalten
+                  vorhandene Werte bei.
+                </Alert>
+
+                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                  <Button variant="outlined" onClick={() => void loadAIStatus()} disabled={settingsLoading || settingsSaving}>
+                    Verwerfen
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={() => void handleSaveAISettings()}
+                    disabled={settingsSaving || settingsLoading}
+                    startIcon={settingsSaving ? <CircularProgress color="inherit" size={16} /> : undefined}
+                  >
+                    Speichern
+                  </Button>
+                </Stack>
+              </>
+            )}
           </Stack>
         </DialogContent>
       </Dialog>
+    );
+  }
+
+  function renderProviderFields(
+    provider: "openai" | "gemini" | "anthropic",
+    label: string,
+    keySet: boolean,
+    model: string,
+    baseUrl: string,
+    disabled: boolean,
+  ) {
+    const modelKey = `${provider}_model` as keyof AISettings;
+    const baseUrlKey = `${provider}_api_base_url` as keyof AISettings;
+    return (
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+        <Stack spacing={2}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+              {label}
+            </Typography>
+            <Chip size="small" color={keySet ? "success" : "default"} label={keySet ? "Schluessel gesetzt" : "kein Schluessel"} />
+          </Stack>
+          <TextField
+            label="Modell"
+            value={model}
+            disabled={disabled}
+            onChange={(event) => patchAISettings({ [modelKey]: event.target.value } as Partial<AISettings>)}
+          />
+          <TextField
+            label="API Adresse"
+            value={baseUrl}
+            disabled={disabled}
+            onChange={(event) => patchAISettings({ [baseUrlKey]: event.target.value } as Partial<AISettings>)}
+          />
+          <TextField
+            label="API-Schluessel"
+            type="password"
+            value={aiSecrets[provider]}
+            disabled={disabled}
+            placeholder={keySet ? "Vorhandenen Schluessel behalten" : "Schluessel eintragen"}
+            onChange={(event) => setAISecrets((current) => ({ ...current, [provider]: event.target.value }))}
+          />
+        </Stack>
+      </Paper>
     );
   }
 }
