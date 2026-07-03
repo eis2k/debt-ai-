@@ -44,7 +44,7 @@ def update_ai_settings(payload: AISettingsUpdate) -> AISettings:
             "ANTHROPIC_MODEL": payload.anthropic_model.strip() or "claude-3-5-haiku-latest",
             "ANTHROPIC_API_BASE_URL": payload.anthropic_api_base_url.strip() or "https://api.anthropic.com/v1",
             "OLLAMA_MODEL": payload.ollama_model.strip() or "qwen3:14b",
-            "OLLAMA_BASE_URL": payload.ollama_base_url.strip() or "http://ollama:11434",
+            "OLLAMA_BASE_URL": payload.ollama_base_url.strip() or "http://host.docker.internal:11434",
         }
     )
     _set_secret(values, "OPENAI_API_KEY", payload.openai_api_key)
