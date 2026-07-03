@@ -16,7 +16,7 @@ def list_transfers(db: Session = Depends(get_db)) -> list[ClaimTransferRead]:
     from_creditor = aliased(Creditor)
     to_creditor = aliased(Creditor)
     rows = db.execute(
-        select(ClaimTransfer, Claim, from_creditor, to_credititor, Document)
+        select(ClaimTransfer, Claim, from_creditor, to_creditor, Document)
         .join(Claim, Claim.id == ClaimTransfer.claim_id)
         .outerjoin(from_creditor, from_creditor.id == ClaimTransfer.from_creditor_id)
         .outerjoin(to_creditor, to_creditor.id == ClaimTransfer.to_creditor_id)
