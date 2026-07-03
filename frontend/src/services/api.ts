@@ -81,6 +81,7 @@ export type AISettingsUpdate = {
 };
 
 export type ExtractedClaim = {
+  has_claim: boolean;
   creditor_name: string | null;
   previous_creditor_name: string | null;
   amount: string | null;
@@ -107,11 +108,30 @@ export type ExtractedClaim = {
 
 export type ClaimExtractionResult = {
   document_id: number;
-  claim_id: number;
+  has_claim: boolean;
+  claim_id: number | null;
   creditor_id: number | null;
   provider: string;
   model: string;
   extracted: ExtractedClaim;
+};
+
+export type BatchClaimExtractionItem = {
+  document_id: number;
+  filename: string;
+  status: "claim" | "no_claim" | "skipped" | "failed";
+  message: string | null;
+  result: ClaimExtractionResult | null;
+};
+
+export type BatchClaimExtractionResult = {
+  total: number;
+  processed: number;
+  claims_created_or_updated: number;
+  no_claim: number;
+  skipped: number;
+  failed: number;
+  items: BatchClaimExtractionItem[];
 };
 
 export type ClaimRead = {
@@ -233,6 +253,14 @@ export async function saveAISettings(payload: AISettingsUpdate): Promise<AISetti
 
 export async function extractClaim(documentId: number): Promise<ClaimExtractionResult> {
   const response = await api.post<ClaimExtractionResult>(`/api/extractions/documents/${documentId}/claim`, {});
+  return response.data;
+}
+
+export async function extractClaimsBatch(documentIds?: number[]): Promise<BatchClaimExtractionResult> {
+  const response = await api.post<BatchClaimExtractionResult>("/api/extractions/claims/batch", {
+    document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
+    limit: 100,
+  });
   return response.data;
 }
 
