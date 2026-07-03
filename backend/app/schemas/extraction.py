@@ -16,6 +16,7 @@ class BatchClaimExtractionRequest(BaseModel):
 
 class ExtractedClaim(BaseModel):
     has_claim: bool = False
+    document_category: str = "unknown"
     creditor_name: str | None = None
     previous_creditor_name: str | None = None
     amount: Decimal | None = None
