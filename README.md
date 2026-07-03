@@ -263,6 +263,20 @@ Ollama starten:
 docker compose --profile ai up -d ollama
 ```
 
+Empfohlenes Offline-Modell fuer 16 GB VRAM:
+
+- bevorzugt: `qwen3:14b`
+- Grund: passt mit ca. 9.3 GB Modellgroesse gut in 16 GB VRAM, bietet 40K
+  Kontext und ist fuer mehrsprachige Instruktionen, strukturiertes Extrahieren,
+  logisches Schliessen und Tool-/Agenten-Aufgaben stark geeignet
+- DebtAI-Aufgaben: deutsche Briefe zusammenfassen, Glaeubiger/Forderungen
+  erkennen, Adressen extrahieren, JSON liefern und Chat ueber OCR-Texte
+- schnellerer Fallback: `qwen3:8b`
+- Alternative mit etwas kleinerem Speicherbedarf: `gemma3:12b`
+- nicht als Standard fuer 16 GB VRAM: `qwen3:30b` oder `qwen3:32b`, weil diese
+  mit 19-20 GB Modellgroesse zu knapp beziehungsweise zu gross fuer 16 GB VRAM
+  sind
+
 Online-Modus:
 
 In `.env` einen Anbieter auswaehlen und den passenden Schluessel setzen:
@@ -331,13 +345,14 @@ Wichtige Tabellen:
 
 ## Ollama
 
-Ollama ist fuer Version 0.1 noch nicht aktiv noetig. Der Container ist vorbereitet und kann bei Bedarf gestartet werden:
+Ollama ist der bevorzugte lokale KI-Weg, wenn DebtAI ohne Online-Anbieter laufen
+soll. Der Container ist vorbereitet und kann bei Bedarf gestartet werden:
 
 ```bash
 docker compose --profile ai up ollama
 ```
 
-Das Standardmodell fuer spaetere Versionen ist Qwen3 14B.
+Das bevorzugte Standardmodell fuer 16 GB VRAM ist `qwen3:14b`.
 
 ## Entwicklung
 
