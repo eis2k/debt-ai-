@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, chat, comparisons, creditors, dashboard, documents, exports, extractions, imports
+from app.api import ai, chat, comparisons, contacts, creditors, dashboard, documents, exports, extractions, imports, transfers
 from app.core.config import settings
 
 app = FastAPI(title="DebtAI", version="1.0.0")
@@ -23,6 +23,8 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"]
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(exports.router, prefix="/api/exports", tags=["exports"])
 app.include_router(comparisons.router, prefix="/api/comparisons", tags=["comparisons"])
+app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
+app.include_router(transfers.router, prefix="/api/transfers", tags=["transfers"])
 
 
 @app.get("/health")
