@@ -132,11 +132,19 @@ oeffnet sich das Einstellungsmenue.
 Das Menue zeigt:
 
 - welcher KI-Anbieter aktiv ist
-- ob OpenAI, Gemini oder Claude technisch verbunden sind
-- wie viele Anbieter einsatzbereit sind
+- ob `Lokal mit Ollama`, `Online-Anbieter` oder `Aus` aktiv ist
+- welches Modell fuer Ollama, OpenAI, Gemini oder Claude verwendet wird
+- ob API-Schluessel fuer Online-Anbieter gesetzt sind
+- welche API-Adressen verwendet werden
 
-API-Schluessel werden aus Sicherheitsgruenden nicht im Browser angezeigt. Sie
-liegen in der lokalen `.env`-Datei und werden vom Backend geladen.
+Im Modus `Lokal mit Ollama` werden die Online-Anbieter in der Oberflaeche
+ausgegraut. Im Modus `Online-Anbieter` wird Ollama ausgegraut. Damit ist immer
+nur ein KI-Weg aktiv.
+
+API-Schluessel werden aus Sicherheitsgruenden nicht im Browser angezeigt. Neue
+Schluessel koennen eingetragen und gespeichert werden; leere Schluessel-Felder
+behalten vorhandene Werte bei. Die Werte liegen in der lokalen `.env`-Datei und
+werden vom Backend nach dem Speichern neu geladen.
 
 ## Paperless importieren
 
@@ -234,12 +242,33 @@ curl http://localhost:8000/api/comparisons/claims
 
 ## KI-Anbieter anschliessen
 
-DebtAI kann technisch fuer OpenAI, Gemini oder Claude vorbereitet werden. Ohne
-API-Schluessel startet die Anwendung weiterhin normal.
+DebtAI kann lokal mit Ollama oder online mit OpenAI, Gemini oder Claude genutzt
+werden. Ohne API-Schluessel startet die Anwendung weiterhin normal.
+
+Die bequemste Einstellung erfolgt in der Oberflaeche ueber das Zahnrad-Symbol.
+Alternativ kann `.env` direkt bearbeitet werden.
+
+Lokaler Modus mit Ollama:
+
+```env
+AI_MODE=offline
+AI_PROVIDER=none
+OLLAMA_MODEL=qwen3:14b
+OLLAMA_BASE_URL=http://ollama:11434
+```
+
+Ollama starten:
+
+```bash
+docker compose --profile ai up -d ollama
+```
+
+Online-Modus:
 
 In `.env` einen Anbieter auswaehlen und den passenden Schluessel setzen:
 
 ```env
+AI_MODE=online
 AI_PROVIDER=openai
 OPENAI_API_KEY=dein_openai_schluessel
 OPENAI_MODEL=gpt-4.1-mini
@@ -248,6 +277,7 @@ OPENAI_MODEL=gpt-4.1-mini
 Alternativ Gemini:
 
 ```env
+AI_MODE=online
 AI_PROVIDER=gemini
 GEMINI_API_KEY=dein_gemini_schluessel
 GEMINI_MODEL=gemini-2.5-flash
@@ -256,6 +286,7 @@ GEMINI_MODEL=gemini-2.5-flash
 Oder Claude:
 
 ```env
+AI_MODE=online
 AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=dein_anthropic_schluessel
 ANTHROPIC_MODEL=claude-3-5-haiku-latest
