@@ -23,6 +23,7 @@ Nutze null, wenn ein Feld nicht sicher erkennbar ist.
 JSON-Schema:
 {
   "has_claim": boolean,
+  "document_category": "claim" | "invoice" | "reminder" | "collection_letter" | "court_notice" | "payment_proof" | "contract" | "identity_admin" | "private_unrelated" | "advertisement" | "unknown",
   "creditor_name": string | null,
   "previous_creditor_name": string | null,
   "amount": number | null,
@@ -50,6 +51,10 @@ Setze "has_claim" nur dann auf true, wenn das Dokument tatsaechlich eine Forderu
 Mahnung, Inkasso-, Zahlungs- oder Gerichtsinformation enthaelt. Bei allgemeinen Briefen,
 Werbung, Deckblaettern, Testdokumenten oder Dokumenten ohne Forderungsbezug setze
 "has_claim": false und alle Forderungsfelder auf null beziehungsweise "unknown".
+Setze "document_category" immer passend, auch wenn "has_claim" false ist. Beispiele:
+"private_unrelated" fuer private Briefe ohne Schuldbezug, "advertisement" fuer Werbung,
+"identity_admin" fuer Ausweis-, Konto-, Versicherungs- oder allgemeine Verwaltungsunterlagen,
+"contract" fuer Vertraege, "payment_proof" fuer Zahlungsbelege.
 """
 
 
@@ -71,7 +76,10 @@ def extract_and_store_claim(
         temperature=0,
     )
     extracted = _parse_extraction(content)
+    document.document_type = _category_label(extracted.document_category)
     if not _has_meaningful_claim(extracted):
+        db.commit()
+        db.refresh(document)
         return None, None, extracted, provider_name, model
 
     creditor = _get_or_create_creditor(db, extracted.creditor_name)
@@ -105,6 +113,7 @@ def _parse_extraction(content: str) -> ExtractedClaim:
     data = json.loads(payload)
     return ExtractedClaim(
         has_claim=bool(data.get("has_claim") or False),
+        document_category=_clean_document_category(data.get("document_category")),
         creditor_name=_clean_string(data.get("creditor_name")),
         previous_creditor_name=_clean_string(data.get("previous_creditor_name")),
         amount=_parse_amount(data.get("amount")),
@@ -128,6 +137,41 @@ def _parse_extraction(content: str) -> ExtractedClaim:
         transfer_date=_parse_date(data.get("transfer_date")),
         notes=_clean_string(data.get("notes")),
     )
+
+
+def _clean_document_category(value: Any) -> str:
+    allowed = {
+        "claim",
+        "invoice",
+        "reminder",
+        "collection_letter",
+        "court_notice",
+        "payment_proof",
+        "contract",
+        "identity_admin",
+        "private_unrelated",
+        "advertisement",
+        "unknown",
+    }
+    category = (_clean_string(value) or "unknown").lower()
+    return category if category in allowed else "unknown"
+
+
+def _category_label(category: str) -> str:
+    labels = {
+        "claim": "Forderung",
+        "invoice": "Rechnung",
+        "reminder": "Mahnung",
+        "collection_letter": "Inkasso",
+        "court_notice": "Gericht",
+        "payment_proof": "Zahlungsbeleg",
+        "contract": "Vertrag",
+        "identity_admin": "Verwaltung",
+        "private_unrelated": "Privat / ohne Schuldbezug",
+        "advertisement": "Werbung",
+        "unknown": "Unbekannt",
+    }
+    return labels.get(category, "Unbekannt")
 
 
 def _has_meaningful_claim(extracted: ExtractedClaim) -> bool:
