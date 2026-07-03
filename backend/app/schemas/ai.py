@@ -6,6 +6,9 @@ class AIStatus(BaseModel):
     configured_provider: str
     available_providers: list[str]
     models: dict[str, str]
+    ollama_available: bool
+    ollama_base_url: str
+    ollama_detected_url: str | None = None
 
 
 class AISettings(BaseModel):
