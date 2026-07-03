@@ -43,6 +43,9 @@ export type AIStatus = {
   configured_provider: string;
   available_providers: string[];
   models: Record<string, string>;
+  ollama_available: boolean;
+  ollama_base_url: string;
+  ollama_detected_url: string | null;
 };
 
 export type AISettings = {
