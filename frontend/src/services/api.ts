@@ -13,6 +13,7 @@ export type DocumentSummary = {
   created_at: string | null;
   document_date: string | null;
   document_type: string | null;
+  tags: string[];
   checksum: string | null;
   confidence_score: string | null;
   paperless_url: string | null;
@@ -83,6 +84,7 @@ export type AISettingsUpdate = {
 export type ExtractedClaim = {
   has_claim: boolean;
   document_category: string;
+  document_tags: string[];
   creditor_name: string | null;
   previous_creditor_name: string | null;
   amount: string | null;
