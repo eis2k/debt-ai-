@@ -30,6 +30,13 @@ Eine lokale Paperless-ngx-Installation mit Redis und PostgreSQL ist im Ordner
 `paperless` vorbereitet. Paperless verwendet Port `8001`, weil das DebtAI-Backend
 bereits Port `8000` belegt.
 
+Paperless nutzt lokale Ordner auf `D:\paperless`:
+
+- `D:\paperless\data`
+- `D:\paperless\media`
+- `D:\paperless\export`
+- `D:\paperless\consume`
+
 Paperless starten:
 
 ```powershell
@@ -44,10 +51,10 @@ docker compose exec webserver createsuperuser
 ```
 
 Danach Paperless unter http://localhost:8001 oeffnen. Dokumente koennen in den
-Ordner `paperless/consume` kopiert werden; Paperless importiert sie automatisch.
+Ordner `D:\paperless\consume` kopiert werden; Paperless importiert sie automatisch.
 
-Die Daten liegen in Docker-Volumes. Ein Export kann in Paperless erstellt und
-im Ordner `paperless/export` abgelegt werden.
+Die Paperless-Daten und Dokumente liegen in den lokalen Ordnern auf `D:\paperless`.
+PostgreSQL und Redis verwenden weiterhin Docker-Volumes.
 
 Paperless stoppen:
 
