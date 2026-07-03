@@ -22,6 +22,7 @@ Antworte ausschliesslich als JSON-Objekt ohne Markdown.
 Nutze null, wenn ein Feld nicht sicher erkennbar ist.
 JSON-Schema:
 {
+  "has_claim": boolean,
   "creditor_name": string | null,
   "previous_creditor_name": string | null,
   "amount": number | null,
@@ -45,6 +46,10 @@ JSON-Schema:
   "transfer_date": "YYYY-MM-DD" | null,
   "notes": string | null
 }
+Setze "has_claim" nur dann auf true, wenn das Dokument tatsaechlich eine Forderung, Rechnung,
+Mahnung, Inkasso-, Zahlungs- oder Gerichtsinformation enthaelt. Bei allgemeinen Briefen,
+Werbung, Deckblaettern, Testdokumenten oder Dokumenten ohne Forderungsbezug setze
+"has_claim": false und alle Forderungsfelder auf null beziehungsweise "unknown".
 """
 
 
@@ -52,7 +57,7 @@ def extract_and_store_claim(
     db: Session,
     document: Document,
     provider: str | None = None,
-) -> tuple[Claim, Creditor | None, ExtractedClaim, str, str]:
+) -> tuple[Claim | None, Creditor | None, ExtractedClaim, str, str]:
     if not document.ocr_text:
         raise ValueError("Document has no OCR text.")
 
@@ -66,6 +71,9 @@ def extract_and_store_claim(
         temperature=0,
     )
     extracted = _parse_extraction(content)
+    if not _has_meaningful_claim(extracted):
+        return None, None, extracted, provider_name, model
+
     creditor = _get_or_create_creditor(db, extracted.creditor_name)
     contact = _get_or_create_extracted_contact(db, extracted)
     if creditor is not None and contact is not None and creditor.contact_id is None:
@@ -96,6 +104,7 @@ def _parse_extraction(content: str) -> ExtractedClaim:
     payload = _extract_json_object(content)
     data = json.loads(payload)
     return ExtractedClaim(
+        has_claim=bool(data.get("has_claim") or False),
         creditor_name=_clean_string(data.get("creditor_name")),
         previous_creditor_name=_clean_string(data.get("previous_creditor_name")),
         amount=_parse_amount(data.get("amount")),
@@ -118,6 +127,22 @@ def _parse_extraction(content: str) -> ExtractedClaim:
         event_date=_parse_date(data.get("event_date")),
         transfer_date=_parse_date(data.get("transfer_date")),
         notes=_clean_string(data.get("notes")),
+    )
+
+
+def _has_meaningful_claim(extracted: ExtractedClaim) -> bool:
+    if not extracted.has_claim:
+        return False
+    return any(
+        [
+            extracted.creditor_name,
+            extracted.amount is not None,
+            extracted.claim_reference,
+            extracted.contract_reference,
+            extracted.previous_creditor_name,
+            extracted.title_exists,
+            extracted.event_type in {"invoice", "reminder", "collection_letter", "court_notice", "payment"},
+        ]
     )
 
 
