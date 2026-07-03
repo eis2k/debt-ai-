@@ -195,6 +195,15 @@ def _get_or_create_claim(db: Session, creditor: Creditor | None, extracted: Extr
                 Claim.contract_reference == extracted.contract_reference,
             )
         )
+    elif creditor and extracted.amount is not None:
+        filters.append(
+            and_(
+                Claim.creditor_id == creditor.id,
+                Claim.amount == extracted.amount,
+                Claim.claim_reference.is_(None),
+                Claim.contract_reference.is_(None),
+            )
+        )
 
     if filters:
         claim = db.scalar(select(Claim).where(*filters))
