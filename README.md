@@ -254,14 +254,23 @@ Lokaler Modus mit Ollama:
 AI_MODE=offline
 AI_PROVIDER=none
 OLLAMA_MODEL=qwen3:14b
-OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_BASE_URL=http://host.docker.internal:11434
 ```
 
-Ollama starten:
+Ollama unter Windows installieren:
 
-```bash
-docker compose --profile ai up -d ollama
+1. Ollama fuer Windows von https://ollama.com/download installieren.
+2. Ollama starten. Die API laeuft standardmaessig auf Port `11434`.
+3. Modell laden:
+
+```powershell
+ollama pull qwen3:14b
 ```
+
+DebtAI laeuft im Docker-Container und erreicht die Windows-Ollama-App ueber
+`http://host.docker.internal:11434`. Im Einstellungsmenue zeigt DebtAI mit einem
+gruenen Haken an, ob Ollama erreichbar ist. Wenn die App lokal ohne Docker
+gestartet wird, erkennt DebtAI auch `http://localhost:11434`.
 
 Empfohlenes Offline-Modell fuer 16 GB VRAM:
 
@@ -346,7 +355,15 @@ Wichtige Tabellen:
 ## Ollama
 
 Ollama ist der bevorzugte lokale KI-Weg, wenn DebtAI ohne Online-Anbieter laufen
-soll. Der Container ist vorbereitet und kann bei Bedarf gestartet werden:
+soll. Empfohlen ist die normale Windows-Version von Ollama, erreichbar ueber den
+Standard-API-Port `11434`. DebtAI erkennt automatisch typische Adressen:
+
+- `http://host.docker.internal:11434` fuer Docker unter Windows
+- `http://localhost:11434` fuer lokal gestartetes Backend
+- `http://ollama:11434` falls der optionale Ollama-Container verwendet wird
+
+Der optionale Ollama-Container ist weiterhin vorbereitet und kann bei Bedarf
+gestartet werden:
 
 ```bash
 docker compose --profile ai up ollama
