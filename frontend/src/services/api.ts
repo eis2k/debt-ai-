@@ -147,6 +147,34 @@ export type ClaimRead = {
   last_seen: string | null;
 };
 
+export type ClaimDocumentRead = {
+  document_id: number | null;
+  filename: string | null;
+  event_type: string;
+  event_date: string | null;
+  amount: string | null;
+  notes: string | null;
+};
+
+export type ClaimSummaryRead = {
+  id: number;
+  creditor_id: number | null;
+  creditor_name: string | null;
+  amount: string | null;
+  currency: string;
+  claim_reference: string | null;
+  contract_reference: string | null;
+  title_exists: boolean;
+  title_type: string | null;
+  status: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  document_count: number;
+  event_count: number;
+  latest_document: string | null;
+  summary: string;
+};
+
 export type CreditorSummary = {
   id: number;
   canonical_name: string;
@@ -271,6 +299,11 @@ export async function fetchDashboard(): Promise<DashboardSummary> {
 
 export async function fetchCreditors(): Promise<CreditorSummary[]> {
   const response = await api.get<CreditorSummary[]>("/api/creditors");
+  return response.data;
+}
+
+export async function fetchClaims(): Promise<ClaimSummaryRead[]> {
+  const response = await api.get<ClaimSummaryRead[]>("/api/claims");
   return response.data;
 }
 
