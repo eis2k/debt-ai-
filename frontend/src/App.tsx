@@ -36,7 +36,9 @@ import {
   AIStatus,
   ChatResponse,
   ClaimExtractionResult,
+  ClaimTransferRead,
   ComparisonGroup,
+  ContactSummary,
   CreditorSummary,
   DashboardSummary,
   DocumentDetail,
@@ -46,14 +48,16 @@ import {
   extractClaim,
   fetchAIStatus,
   fetchComparisons,
+  fetchContacts,
   fetchCreditors,
   fetchDashboard,
   fetchDocument,
   fetchDocuments,
+  fetchTransfers,
   importPaperless,
 } from "./services/api";
 
-type View = "documents" | "creditors" | "dashboard" | "comparison" | "chat";
+type View = "documents" | "creditors" | "contacts" | "transfers" | "dashboard" | "comparison" | "chat";
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
@@ -69,6 +73,8 @@ export default function App() {
   const [view, setView] = useState<View>("documents");
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [creditors, setCreditors] = useState<CreditorSummary[]>([]);
+  const [contacts, setContacts] = useState<ContactSummary[]>([]);
+  const [transfers, setTransfers] = useState<ClaimTransferRead[]>([]);
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [comparisons, setComparisons] = useState<ComparisonGroup[]>([]);
   const [total, setTotal] = useState(0);
@@ -126,6 +132,30 @@ export default function App() {
     }
   }
 
+  async function loadContacts() {
+    setLoading(true);
+    setError(null);
+    try {
+      setContacts(await fetchContacts());
+    } catch (err) {
+      setError("Kontakte konnten nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadTransfers() {
+    setLoading(true);
+    setError(null);
+    try {
+      setTransfers(await fetchTransfers());
+    } catch (err) {
+      setError("Forderungswechsel konnten nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function loadComparisons() {
     setLoading(true);
     setError(null);
@@ -141,6 +171,8 @@ export default function App() {
   async function refreshCurrentView(nextView = view) {
     if (nextView === "documents") await loadDocuments();
     if (nextView === "creditors") await loadCreditors();
+    if (nextView === "contacts") await loadContacts();
+    if (nextView === "transfers") await loadTransfers();
     if (nextView === "dashboard") await loadDashboard();
     if (nextView === "comparison") await loadComparisons();
   }
@@ -191,8 +223,9 @@ export default function App() {
     try {
       setExtractionResult(await extractClaim(selected.id));
       await loadCreditors();
+      await loadContacts();
+      await loadTransfers();
       await loadDashboard();
-      await loadComparisons();
     } catch (err) {
       setError("Forderung konnte nicht erkannt werden. Pruefe KI-Anbieter und OCR-Text.");
     } finally {
@@ -221,6 +254,8 @@ export default function App() {
   useEffect(() => {
     void loadDocuments("");
     void loadCreditors();
+    void loadContacts();
+    void loadTransfers();
     void loadDashboard();
     void loadComparisons();
   }, []);
@@ -259,6 +294,8 @@ export default function App() {
         <Tabs value={view} onChange={(_, value) => changeView(value)} sx={{ px: 3 }}>
           <Tab value="documents" label="Dokumente" />
           <Tab value="creditors" label="Glaeubiger" />
+          <Tab value="contacts" label="Kontakte" />
+          <Tab value="transfers" label="Wechsel" />
           <Tab value="dashboard" label="Dashboard" />
           <Tab value="comparison" label="Vergleich" />
           <Tab value="chat" label="Chat" />
@@ -270,6 +307,8 @@ export default function App() {
           {error && <Alert severity="error">{error}</Alert>}
           {view === "documents" && renderDocuments()}
           {view === "creditors" && renderCreditors()}
+          {view === "contacts" && renderContacts()}
+          {view === "transfers" && renderTransfers()}
           {view === "dashboard" && renderDashboard()}
           {view === "comparison" && renderComparison()}
           {view === "chat" && renderChat()}
@@ -380,6 +419,85 @@ export default function App() {
     );
   }
 
+  function renderContacts() {
+    return (
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Adresse</TableCell>
+              <TableCell>E-Mail</TableCell>
+              <TableCell>Telefon</TableCell>
+              <TableCell>Dokumente</TableCell>
+              <TableCell>Glaeubiger</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading && loadingRow(6)}
+            {!loading && contacts.length === 0 && emptyRow(6, "Keine Kontakte")}
+            {!loading &&
+              contacts.map((contact) => (
+                <TableRow hover key={contact.id}>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {contact.display_name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {contact.person_name ?? contact.organization_name ?? "-"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {[contact.street, [contact.postal_code, contact.city].filter(Boolean).join(" "), contact.country]
+                      .filter(Boolean)
+                      .join(", ") || "-"}
+                  </TableCell>
+                  <TableCell>{contact.email ?? "-"}</TableCell>
+                  <TableCell>{contact.phone ?? "-"}</TableCell>
+                  <TableCell>{contact.document_count}</TableCell>
+                  <TableCell>{contact.creditor_count}</TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  }
+
+  function renderTransfers() {
+    return (
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Datum</TableCell>
+              <TableCell>Forderung</TableCell>
+              <TableCell>Von</TableCell>
+              <TableCell>Zu</TableCell>
+              <TableCell>Dokument</TableCell>
+              <TableCell>Notiz</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading && loadingRow(6)}
+            {!loading && transfers.length === 0 && emptyRow(6, "Noch keine Forderungswechsel erkannt")}
+            {!loading &&
+              transfers.map((transfer) => (
+                <TableRow hover key={transfer.id}>
+                  <TableCell>{formatDate(transfer.transfer_date ?? transfer.created_at)}</TableCell>
+                  <TableCell>{transfer.claim_reference ?? transfer.contract_reference ?? `#${transfer.claim_id}`}</TableCell>
+                  <TableCell>{transfer.from_creditor_name ?? "-"}</TableCell>
+                  <TableCell>{transfer.to_creditor_name ?? "-"}</TableCell>
+                  <TableCell>{transfer.document_filename ?? "-"}</TableCell>
+                  <TableCell>{transfer.notes ?? "-"}</TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  }
+
   function renderDashboard() {
     return (
       <Stack spacing={2}>
@@ -413,6 +531,54 @@ export default function App() {
             </TableBody>
           </Table>
         </TableContainer>
+      </Stack>
+    );
+  }
+
+  function renderChat() {
+    return (
+      <Stack spacing={2}>
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+          <Stack spacing={2}>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Frage zu deinen Dokumenten"
+            />
+            <Button
+              variant="contained"
+              onClick={() => void handleChat()}
+              disabled={chatLoading || !question.trim()}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              {chatLoading ? "Frage laeuft" : "Fragen"}
+            </Button>
+          </Stack>
+        </Paper>
+        {chatResponse && (
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
+            <Stack spacing={2}>
+              <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
+                {chatResponse.answer}
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <Chip size="small" label={`${chatResponse.provider} / ${chatResponse.model}`} />
+                <Chip size="small" label={`${chatResponse.sources.length} Quellen`} />
+              </Stack>
+              {chatResponse.sources.map((source) => (
+                <Box key={source.document_id}>
+                  <Typography variant="subtitle2">{source.filename}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {source.snippet}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Paper>
+        )}
       </Stack>
     );
   }
@@ -463,54 +629,6 @@ export default function App() {
               </Table>
             </TableContainer>
           ))}
-      </Stack>
-    );
-  }
-
-  function renderChat() {
-    return (
-      <Stack spacing={2}>
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-          <Stack spacing={2}>
-            <TextField
-              fullWidth
-              multiline
-              minRows={3}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Frage zu deinen Dokumenten"
-            />
-            <Button
-              variant="contained"
-              onClick={() => void handleChat()}
-              disabled={chatLoading || !question.trim()}
-              sx={{ alignSelf: "flex-start" }}
-            >
-              {chatLoading ? "Frage laeuft" : "Fragen"}
-            </Button>
-          </Stack>
-        </Paper>
-        {chatResponse && (
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
-            <Stack spacing={2}>
-              <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-                {chatResponse.answer}
-              </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip size="small" label={`${chatResponse.provider} / ${chatResponse.model}`} />
-                <Chip size="small" label={`${chatResponse.sources.length} Quellen`} />
-              </Stack>
-              {chatResponse.sources.map((source) => (
-                <Box key={source.document_id}>
-                  <Typography variant="subtitle2">{source.filename}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {source.snippet}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          </Paper>
-        )}
       </Stack>
     );
   }
