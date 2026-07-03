@@ -13,6 +13,7 @@ export type DocumentSummary = {
   created_at: string | null;
   document_date: string | null;
   document_type: string | null;
+  tags: string[];
   checksum: string | null;
   confidence_score: string | null;
   paperless_url: string | null;
@@ -39,31 +40,101 @@ export type ImportResult = {
 };
 
 export type AIStatus = {
+  mode: string;
   configured_provider: string;
   available_providers: string[];
+  models: Record<string, string>;
+  ollama_available: boolean;
+  ollama_base_url: string;
+  ollama_detected_url: string | null;
+};
+
+export type AISettings = {
+  mode: string;
+  provider: string;
+  openai_model: string;
+  openai_api_base_url: string;
+  openai_api_key_set: boolean;
+  gemini_model: string;
+  gemini_api_base_url: string;
+  gemini_api_key_set: boolean;
+  anthropic_model: string;
+  anthropic_api_base_url: string;
+  anthropic_api_key_set: boolean;
+  ollama_model: string;
+  ollama_base_url: string;
+};
+
+export type AISettingsUpdate = {
+  mode: string;
+  provider: string;
+  openai_model: string;
+  openai_api_base_url: string;
+  openai_api_key?: string | null;
+  gemini_model: string;
+  gemini_api_base_url: string;
+  gemini_api_key?: string | null;
+  anthropic_model: string;
+  anthropic_api_base_url: string;
+  anthropic_api_key?: string | null;
+  ollama_model: string;
+  ollama_base_url: string;
 };
 
 export type ExtractedClaim = {
+  has_claim: boolean;
+  document_category: string;
+  document_tags: string[];
   creditor_name: string | null;
+  previous_creditor_name: string | null;
   amount: string | null;
   currency: string;
   claim_reference: string | null;
   contract_reference: string | null;
+  contact_name: string | null;
+  contact_organization: string | null;
+  contact_person: string | null;
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string | null;
+  email: string | null;
+  phone: string | null;
   title_exists: boolean;
   title_type: string | null;
   status: string;
   event_type: string;
   event_date: string | null;
+  transfer_date: string | null;
   notes: string | null;
 };
 
 export type ClaimExtractionResult = {
   document_id: number;
-  claim_id: number;
+  has_claim: boolean;
+  claim_id: number | null;
   creditor_id: number | null;
   provider: string;
   model: string;
   extracted: ExtractedClaim;
+};
+
+export type BatchClaimExtractionItem = {
+  document_id: number;
+  filename: string;
+  status: "claim" | "no_claim" | "skipped" | "failed";
+  message: string | null;
+  result: ClaimExtractionResult | null;
+};
+
+export type BatchClaimExtractionResult = {
+  total: number;
+  processed: number;
+  claims_created_or_updated: number;
+  no_claim: number;
+  skipped: number;
+  failed: number;
+  items: BatchClaimExtractionItem[];
 };
 
 export type ClaimRead = {
@@ -79,6 +150,34 @@ export type ClaimRead = {
   last_seen: string | null;
 };
 
+export type ClaimDocumentRead = {
+  document_id: number | null;
+  filename: string | null;
+  event_type: string;
+  event_date: string | null;
+  amount: string | null;
+  notes: string | null;
+};
+
+export type ClaimSummaryRead = {
+  id: number;
+  creditor_id: number | null;
+  creditor_name: string | null;
+  amount: string | null;
+  currency: string;
+  claim_reference: string | null;
+  contract_reference: string | null;
+  title_exists: boolean;
+  title_type: string | null;
+  status: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  document_count: number;
+  event_count: number;
+  latest_document: string | null;
+  summary: string;
+};
+
 export type CreditorSummary = {
   id: number;
   canonical_name: string;
@@ -86,6 +185,39 @@ export type CreditorSummary = {
   claim_count: number;
   total_amount: string;
   open_amount: string;
+};
+
+export type ContactSummary = {
+  id: number;
+  display_name: string;
+  organization_name: string | null;
+  person_name: string | null;
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string;
+  email: string | null;
+  phone: string | null;
+  document_count: number;
+  creditor_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ClaimTransferRead = {
+  id: number;
+  claim_id: number;
+  claim_reference: string | null;
+  contract_reference: string | null;
+  from_creditor_id: number | null;
+  from_creditor_name: string | null;
+  to_creditor_id: number | null;
+  to_creditor_name: string | null;
+  document_id: number | null;
+  document_filename: string | null;
+  transfer_date: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 export type DashboardSummary = {
@@ -140,8 +272,26 @@ export async function fetchAIStatus(): Promise<AIStatus> {
   return response.data;
 }
 
+export async function fetchAISettings(): Promise<AISettings> {
+  const response = await api.get<AISettings>("/api/ai/settings");
+  return response.data;
+}
+
+export async function saveAISettings(payload: AISettingsUpdate): Promise<AISettings> {
+  const response = await api.put<AISettings>("/api/ai/settings", payload);
+  return response.data;
+}
+
 export async function extractClaim(documentId: number): Promise<ClaimExtractionResult> {
   const response = await api.post<ClaimExtractionResult>(`/api/extractions/documents/${documentId}/claim`, {});
+  return response.data;
+}
+
+export async function extractClaimsBatch(documentIds?: number[]): Promise<BatchClaimExtractionResult> {
+  const response = await api.post<BatchClaimExtractionResult>("/api/extractions/claims/batch", {
+    document_ids: documentIds && documentIds.length > 0 ? documentIds : null,
+    limit: 100,
+  });
   return response.data;
 }
 
@@ -152,6 +302,21 @@ export async function fetchDashboard(): Promise<DashboardSummary> {
 
 export async function fetchCreditors(): Promise<CreditorSummary[]> {
   const response = await api.get<CreditorSummary[]>("/api/creditors");
+  return response.data;
+}
+
+export async function fetchClaims(): Promise<ClaimSummaryRead[]> {
+  const response = await api.get<ClaimSummaryRead[]>("/api/claims");
+  return response.data;
+}
+
+export async function fetchContacts(): Promise<ContactSummary[]> {
+  const response = await api.get<ContactSummary[]>("/api/contacts");
+  return response.data;
+}
+
+export async function fetchTransfers(): Promise<ClaimTransferRead[]> {
+  const response = await api.get<ClaimTransferRead[]>("/api/transfers");
   return response.data;
 }
 

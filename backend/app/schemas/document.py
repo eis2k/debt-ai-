@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DocumentRead(BaseModel):
@@ -11,6 +11,7 @@ class DocumentRead(BaseModel):
     created_at: datetime | None
     document_date: date | None
     document_type: str | None
+    tags: list[str] = Field(default_factory=list)
     checksum: str | None
     confidence_score: Decimal | None
     paperless_url: str | None

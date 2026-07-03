@@ -1,6 +1,6 @@
 # DebtAI
 
-DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 1.0 verbindet Paperless-Import, KI-Extraktion, Forderungskonsolidierung, Dashboard, Quellen-Chat und CSV-Export.
+DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Schuldendokumenten. Version 1.0 verbindet Paperless-Import, KI-Extraktion, Kontakt- und Adresserkennung, Forderungskonsolidierung, Wechselhistorie, Dashboard, Quellen-Chat und CSV-Export.
 
 ## Funktionen in Version 1.0
 
@@ -10,7 +10,11 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - Paperless-ngx-Import ueber die Paperless API
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - KI-Extraktion fuer Forderungsdaten aus OCR-Texten
-- Speicherung erkannter Glaeubiger, Forderungen und Forderungsereignisse
+- automatische Klassifikation auch fuer Dokumente ohne Schuldbezug
+- automatische Vergabe passender `#tags` pro Dokument
+- Speicherung erkannter Kontakte, Adressen, Glaeubiger, Forderungen und Forderungsereignisse
+- automatische Verknuepfung neuer Briefe mit bekannten Kontakten
+- Historie fuer Forderungswechsel von einem Glaeubiger zum naechsten
 - Glaeubigeruebersicht und konsolidierte Forderungsbetraege
 - Dashboard mit Kennzahlen und Statusverteilung
 - Vergleichsmodul fuer moegliche doppelte oder zusammengehoerige Forderungen
@@ -112,7 +116,10 @@ docker compose up --build
 Die Oberflaeche ist in vier Tabs aufgeteilt:
 
 - `Dokumente`: Paperless-Import, Suche, OCR-Detailansicht und Forderungserkennung
+- `Forderungen`: zusammengefuehrte Forderungen mit Betrag, Glaeubiger, Zeitraum, Schreiben und Kurzfassung
 - `Glaeubiger`: konsolidierte Glaeubiger mit Anzahl und Summe der Forderungen
+- `Kontakte`: erkannte Absender, Adressen und automatisch verknuepfte Dokumente
+- `Wechsel`: Historie, wann eine Forderung von einem Glaeubiger zum naechsten ging
 - `Dashboard`: Kennzahlen, offene Betraege, betitelte Forderungen und Statusgruppen
 - `Vergleich`: moegliche doppelte oder zusammengehoerige Forderungen
 - `Chat`: Fragen an die importierten Dokumente mit Quellenanzeige
@@ -128,11 +135,19 @@ oeffnet sich das Einstellungsmenue.
 Das Menue zeigt:
 
 - welcher KI-Anbieter aktiv ist
-- ob OpenAI, Gemini oder Claude technisch verbunden sind
-- wie viele Anbieter einsatzbereit sind
+- ob `Lokal mit Ollama`, `Online-Anbieter` oder `Aus` aktiv ist
+- welches Modell fuer Ollama, OpenAI, Gemini oder Claude verwendet wird
+- ob API-Schluessel fuer Online-Anbieter gesetzt sind
+- welche API-Adressen verwendet werden
 
-API-Schluessel werden aus Sicherheitsgruenden nicht im Browser angezeigt. Sie
-liegen in der lokalen `.env`-Datei und werden vom Backend geladen.
+Im Modus `Lokal mit Ollama` werden die Online-Anbieter in der Oberflaeche
+ausgegraut. Im Modus `Online-Anbieter` wird Ollama ausgegraut. Damit ist immer
+nur ein KI-Weg aktiv.
+
+API-Schluessel werden aus Sicherheitsgruenden nicht im Browser angezeigt. Neue
+Schluessel koennen eingetragen und gespeichert werden; leere Schluessel-Felder
+behalten vorhandene Werte bei. Die Werte liegen in der lokalen `.env`-Datei und
+werden vom Backend nach dem Speichern neu geladen.
 
 ## Paperless importieren
 
@@ -158,14 +173,19 @@ curl -X POST http://localhost:8000/api/import/paperless \
 
 Ein importiertes Dokument in der Dokumentenliste anklicken und im Detailfenster
 `Forderung erkennen` auswaehlen. DebtAI sendet den OCR-Text an den konfigurierten
-KI-Anbieter und speichert die erkannten Daten in den Tabellen `creditors`,
-`claims` und `claim_events`.
+KI-Anbieter und speichert die erkannten Daten in den Tabellen `contacts`,
+`document_contacts`, `creditors`, `claims`, `claim_events` und
+`claim_transfers`.
 
 Erkannt werden unter anderem:
 
+- Dokumentkategorie, auch wenn keine Forderung enthalten ist
+- passende Dokument-Tags wie `#forderung`, `#inkasso`, `#vertrag`, `#werbung` oder `#verwaltung`
 - Glaeubiger
+- Kontaktname und Adressdaten
 - Forderungsbetrag und Waehrung
 - Aktenzeichen oder Vertragsreferenz
+- vorheriger Glaeubiger beziehungsweise Forderungswechsel
 - Titelstatus
 - Dokument- oder Ereignistyp
 - relevantes Datum
@@ -174,6 +194,25 @@ Die KI-Extraktion benoetigt einen konfigurierten Anbieter in `.env`. Ohne
 API-Schluessel bleibt DebtAI normal nutzbar, die Forderungserkennung meldet dann
 aber, dass kein KI-Anbieter eingerichtet ist.
 
+Auch Dokumente ohne Schuldbezug werden verarbeitet. DebtAI speichert dann keine
+Forderung, setzt aber den Dokumenttyp, zum Beispiel `Werbung`, `Vertrag`,
+`Verwaltung`, `Zahlungsbeleg`, `Privat / ohne Schuldbezug` oder `Unbekannt`.
+Zusaetzlich vergibt DebtAI automatisch passende `#tags`, die in der
+Dokumentenliste sichtbar sind und ueber die Suche gefunden werden koennen.
+
+Wenn ein Kontakt einmal erkannt wurde, legt DebtAI einen Alias an. Beim naechsten
+Paperless-Import wird der OCR-Text gegen bekannte Aliasnamen geprueft und der
+Brief automatisch mit dem Kontakt verknuepft. Wenn ein bekanntes Aktenzeichen
+spaeter mit einem anderen Glaeubiger auftaucht, wird im Tab `Wechsel` ein
+Eintrag mit Datum, altem Glaeubiger, neuem Glaeubiger und Quelldokument
+gespeichert.
+
+Mehrere Schreiben zu einer Forderung werden zusammengefuehrt, wenn Aktenzeichen,
+Vertragsreferenz oder bei fehlenden Referenzen Glaeubiger und Betrag
+zusammenpassen. Im Tab `Forderungen` zeigt DebtAI daraus eine konsolidierte
+Kurzfassung mit Glaeubiger, Betrag, Referenzen, Zeitraum, Status und Anzahl der
+zugeordneten Schreiben.
+
 Alternativ per API:
 
 ```bash
@@ -181,6 +220,26 @@ curl -X POST http://localhost:8000/api/extractions/documents/1/claim \
   -H "Content-Type: application/json" \
   -d "{}"
 ```
+
+## Stapelverarbeitung
+
+In der Dokumentenliste kann ueber `Forderungen pruefen` die aktuell geladene
+Dokumentenliste in einem Durchlauf verarbeitet werden. DebtAI prueft jedes
+Dokument einzeln, speichert nur echte Forderungen und zaehlt Dokumente ohne
+Forderung separat. Dokumente ohne OCR-Text werden uebersprungen, einzelne Fehler
+brechen den Stapellauf nicht ab. Bei Dokumenten ohne Forderung zeigt das
+Batch-Ergebnis die erkannte Kategorie an.
+
+Alternativ per API:
+
+```bash
+curl -X POST http://localhost:8000/api/extractions/claims/batch \
+  -H "Content-Type: application/json" \
+  -d "{\"document_ids\":[1,2,3],\"limit\":100}"
+```
+
+Ohne `document_ids` verarbeitet der Endpunkt die neuesten Dokumente bis zum
+angegebenen Limit.
 
 ## Quellen-Chat
 
@@ -220,12 +279,56 @@ curl http://localhost:8000/api/comparisons/claims
 
 ## KI-Anbieter anschliessen
 
-DebtAI kann technisch fuer OpenAI, Gemini oder Claude vorbereitet werden. Ohne
-API-Schluessel startet die Anwendung weiterhin normal.
+DebtAI kann lokal mit Ollama oder online mit OpenAI, Gemini oder Claude genutzt
+werden. Ohne API-Schluessel startet die Anwendung weiterhin normal.
+
+Die bequemste Einstellung erfolgt in der Oberflaeche ueber das Zahnrad-Symbol.
+Alternativ kann `.env` direkt bearbeitet werden.
+
+Lokaler Modus mit Ollama:
+
+```env
+AI_MODE=offline
+AI_PROVIDER=none
+OLLAMA_MODEL=qwen3:14b
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+Ollama unter Windows installieren:
+
+1. Ollama fuer Windows von https://ollama.com/download installieren.
+2. Ollama starten. Die API laeuft standardmaessig auf Port `11434`.
+3. Modell laden:
+
+```powershell
+ollama pull qwen3:14b
+```
+
+DebtAI laeuft im Docker-Container und erreicht die Windows-Ollama-App ueber
+`http://host.docker.internal:11434`. Im Einstellungsmenue zeigt DebtAI mit einem
+gruenen Haken an, ob Ollama erreichbar ist. Wenn die App lokal ohne Docker
+gestartet wird, erkennt DebtAI auch `http://localhost:11434`.
+
+Empfohlenes Offline-Modell fuer 16 GB VRAM:
+
+- bevorzugt: `qwen3:14b`
+- Grund: passt mit ca. 9.3 GB Modellgroesse gut in 16 GB VRAM, bietet 40K
+  Kontext und ist fuer mehrsprachige Instruktionen, strukturiertes Extrahieren,
+  logisches Schliessen und Tool-/Agenten-Aufgaben stark geeignet
+- DebtAI-Aufgaben: deutsche Briefe zusammenfassen, Glaeubiger/Forderungen
+  erkennen, Adressen extrahieren, JSON liefern und Chat ueber OCR-Texte
+- schnellerer Fallback: `qwen3:8b`
+- Alternative mit etwas kleinerem Speicherbedarf: `gemma3:12b`
+- nicht als Standard fuer 16 GB VRAM: `qwen3:30b` oder `qwen3:32b`, weil diese
+  mit 19-20 GB Modellgroesse zu knapp beziehungsweise zu gross fuer 16 GB VRAM
+  sind
+
+Online-Modus:
 
 In `.env` einen Anbieter auswaehlen und den passenden Schluessel setzen:
 
 ```env
+AI_MODE=online
 AI_PROVIDER=openai
 OPENAI_API_KEY=dein_openai_schluessel
 OPENAI_MODEL=gpt-4.1-mini
@@ -234,6 +337,7 @@ OPENAI_MODEL=gpt-4.1-mini
 Alternativ Gemini:
 
 ```env
+AI_MODE=online
 AI_PROVIDER=gemini
 GEMINI_API_KEY=dein_gemini_schluessel
 GEMINI_MODEL=gemini-2.5-flash
@@ -242,6 +346,7 @@ GEMINI_MODEL=gemini-2.5-flash
 Oder Claude:
 
 ```env
+AI_MODE=online
 AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=dein_anthropic_schluessel
 ANTHROPIC_MODEL=claude-3-5-haiku-latest
@@ -274,21 +379,34 @@ Die Datenbank wird beim Start automatisch vorbereitet. Alembic legt das Schema a
 Wichtige Tabellen:
 
 - `documents`: importierte Paperless-Dokumente mit OCR-Text
+- `contacts`: erkannte Kontakte und Adressdaten
+- `contact_aliases`: alternative Kontakt-Schreibweisen fuer automatische Zuordnung
+- `document_contacts`: Verknuepfung zwischen Dokumenten und Kontakten
 - `creditors`: eindeutige Glaeubiger
 - `creditor_aliases`: alternative Schreibweisen
 - `claims`: Forderungen
 - `claim_events`: Forderungshistorie
+- `claim_transfers`: Wechsel einer Forderung zwischen Glaeubigern
 - `embeddings`: Textabschnitte und spaetere Vektor-Embeddings
 
 ## Ollama
 
-Ollama ist fuer Version 0.1 noch nicht aktiv noetig. Der Container ist vorbereitet und kann bei Bedarf gestartet werden:
+Ollama ist der bevorzugte lokale KI-Weg, wenn DebtAI ohne Online-Anbieter laufen
+soll. Empfohlen ist die normale Windows-Version von Ollama, erreichbar ueber den
+Standard-API-Port `11434`. DebtAI erkennt automatisch typische Adressen:
+
+- `http://host.docker.internal:11434` fuer Docker unter Windows
+- `http://localhost:11434` fuer lokal gestartetes Backend
+- `http://ollama:11434` falls der optionale Ollama-Container verwendet wird
+
+Der optionale Ollama-Container ist weiterhin vorbereitet und kann bei Bedarf
+gestartet werden:
 
 ```bash
 docker compose --profile ai up ollama
 ```
 
-Das Standardmodell fuer spaetere Versionen ist Qwen3 14B.
+Das bevorzugte Standardmodell fuer 16 GB VRAM ist `qwen3:14b`.
 
 ## Entwicklung
 

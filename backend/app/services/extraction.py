@@ -8,12 +8,13 @@ from dateutil.parser import parse as parse_date
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.models.claim import Claim, ClaimEvent
+from app.models.claim import Claim, ClaimEvent, ClaimTransfer
 from app.models.creditor import Creditor, CreditorAlias
 from app.models.document import Document
 from app.schemas.ai import AIMessage
 from app.schemas.extraction import ExtractedClaim
 from app.services.ai import complete
+from app.services.contacts import get_or_create_contact, link_document_contact
 
 
 SYSTEM_PROMPT = """Du extrahierst Forderungsdaten aus deutschen Schuldendokumenten.
@@ -21,18 +22,43 @@ Antworte ausschliesslich als JSON-Objekt ohne Markdown.
 Nutze null, wenn ein Feld nicht sicher erkennbar ist.
 JSON-Schema:
 {
+  "has_claim": boolean,
+  "document_category": "claim" | "invoice" | "reminder" | "collection_letter" | "court_notice" | "payment_proof" | "contract" | "identity_admin" | "private_unrelated" | "advertisement" | "unknown",
+  "document_tags": ["#tag"],
   "creditor_name": string | null,
+  "previous_creditor_name": string | null,
   "amount": number | null,
   "currency": "EUR",
   "claim_reference": string | null,
   "contract_reference": string | null,
+  "contact_name": string | null,
+  "contact_organization": string | null,
+  "contact_person": string | null,
+  "street": string | null,
+  "postal_code": string | null,
+  "city": string | null,
+  "country": string | null,
+  "email": string | null,
+  "phone": string | null,
   "title_exists": boolean,
   "title_type": string | null,
   "status": "unknown" | "open" | "paid" | "disputed" | "collection" | "court",
   "event_type": "document_seen" | "invoice" | "reminder" | "collection_letter" | "court_notice" | "payment" | "other",
   "event_date": "YYYY-MM-DD" | null,
+  "transfer_date": "YYYY-MM-DD" | null,
   "notes": string | null
 }
+Setze "has_claim" nur dann auf true, wenn das Dokument tatsaechlich eine Forderung, Rechnung,
+Mahnung, Inkasso-, Zahlungs- oder Gerichtsinformation enthaelt. Bei allgemeinen Briefen,
+Werbung, Deckblaettern, Testdokumenten oder Dokumenten ohne Forderungsbezug setze
+"has_claim": false und alle Forderungsfelder auf null beziehungsweise "unknown".
+Setze "document_category" immer passend, auch wenn "has_claim" false ist. Beispiele:
+"private_unrelated" fuer private Briefe ohne Schuldbezug, "advertisement" fuer Werbung,
+"identity_admin" fuer Ausweis-, Konto-, Versicherungs- oder allgemeine Verwaltungsunterlagen,
+"contract" fuer Vertraege, "payment_proof" fuer Zahlungsbelege.
+Setze 3 bis 8 kurze, deutsche "document_tags" mit fuehrendem #. Beispiele:
+"#forderung", "#inkasso", "#mahnung", "#rechnung", "#vertrag", "#werbung",
+"#verwaltung", "#zahlungsbeleg", "#privat", "#gericht", "#konto", "#versicherung".
 """
 
 
@@ -40,7 +66,7 @@ def extract_and_store_claim(
     db: Session,
     document: Document,
     provider: str | None = None,
-) -> tuple[Claim, Creditor | None, ExtractedClaim, str, str]:
+) -> tuple[Claim | None, Creditor | None, ExtractedClaim, str, str]:
     if not document.ocr_text:
         raise ValueError("Document has no OCR text.")
 
@@ -54,8 +80,20 @@ def extract_and_store_claim(
         temperature=0,
     )
     extracted = _parse_extraction(content)
+    document.document_type = _category_label(extracted.document_category)
+    document.tags = _merge_document_tags(document.tags, _tags_from_extraction(extracted))
+    if not _has_meaningful_claim(extracted):
+        db.commit()
+        db.refresh(document)
+        return None, None, extracted, provider_name, model
+
     creditor = _get_or_create_creditor(db, extracted.creditor_name)
+    contact = _get_or_create_extracted_contact(db, extracted)
+    if creditor is not None and contact is not None and creditor.contact_id is None:
+        creditor.contact_id = contact.id
+    link_document_contact(db, document, contact, role="sender", confidence=Decimal("0.90"))
     claim = _get_or_create_claim(db, creditor, extracted)
+    _record_transfer_if_needed(db, claim, creditor, document, extracted)
     _apply_extraction_to_claim(claim, extracted, document)
     db.flush()
     _upsert_event(db, claim, document, extracted)
@@ -79,17 +117,142 @@ def _parse_extraction(content: str) -> ExtractedClaim:
     payload = _extract_json_object(content)
     data = json.loads(payload)
     return ExtractedClaim(
+        has_claim=bool(data.get("has_claim") or False),
+        document_category=_clean_document_category(data.get("document_category")),
+        document_tags=_normalize_tags(data.get("document_tags") if isinstance(data.get("document_tags"), list) else []),
         creditor_name=_clean_string(data.get("creditor_name")),
+        previous_creditor_name=_clean_string(data.get("previous_creditor_name")),
         amount=_parse_amount(data.get("amount")),
         currency=(_clean_string(data.get("currency")) or "EUR")[:3].upper(),
         claim_reference=_clean_string(data.get("claim_reference")),
         contract_reference=_clean_string(data.get("contract_reference")),
+        contact_name=_clean_string(data.get("contact_name")),
+        contact_organization=_clean_string(data.get("contact_organization")),
+        contact_person=_clean_string(data.get("contact_person")),
+        street=_clean_string(data.get("street")),
+        postal_code=_clean_string(data.get("postal_code")),
+        city=_clean_string(data.get("city")),
+        country=_clean_string(data.get("country")),
+        email=_clean_string(data.get("email")),
+        phone=_clean_string(data.get("phone")),
         title_exists=bool(data.get("title_exists") or False),
         title_type=_clean_string(data.get("title_type")),
         status=_clean_status(data.get("status")),
         event_type=_clean_event_type(data.get("event_type")),
         event_date=_parse_date(data.get("event_date")),
+        transfer_date=_parse_date(data.get("transfer_date")),
         notes=_clean_string(data.get("notes")),
+    )
+
+
+def _clean_document_category(value: Any) -> str:
+    allowed = {
+        "claim",
+        "invoice",
+        "reminder",
+        "collection_letter",
+        "court_notice",
+        "payment_proof",
+        "contract",
+        "identity_admin",
+        "private_unrelated",
+        "advertisement",
+        "unknown",
+    }
+    category = (_clean_string(value) or "unknown").lower()
+    return category if category in allowed else "unknown"
+
+
+def _category_label(category: str) -> str:
+    labels = {
+        "claim": "Forderung",
+        "invoice": "Rechnung",
+        "reminder": "Mahnung",
+        "collection_letter": "Inkasso",
+        "court_notice": "Gericht",
+        "payment_proof": "Zahlungsbeleg",
+        "contract": "Vertrag",
+        "identity_admin": "Verwaltung",
+        "private_unrelated": "Privat / ohne Schuldbezug",
+        "advertisement": "Werbung",
+        "unknown": "Unbekannt",
+    }
+    return labels.get(category, "Unbekannt")
+
+
+def _tags_from_extraction(extracted: ExtractedClaim) -> list[str]:
+    category_tags = {
+        "claim": "#forderung",
+        "invoice": "#rechnung",
+        "reminder": "#mahnung",
+        "collection_letter": "#inkasso",
+        "court_notice": "#gericht",
+        "payment_proof": "#zahlungsbeleg",
+        "contract": "#vertrag",
+        "identity_admin": "#verwaltung",
+        "private_unrelated": "#privat",
+        "advertisement": "#werbung",
+        "unknown": "#unklar",
+    }
+    values = [*extracted.document_tags, category_tags.get(extracted.document_category, "#unklar")]
+    if extracted.has_claim:
+        values.append("#forderung")
+    if extracted.title_exists:
+        values.append("#titel")
+    if extracted.status and extracted.status != "unknown":
+        values.append(f"#{extracted.status}")
+    if extracted.event_type and extracted.event_type != "document_seen":
+        values.append(f"#{extracted.event_type}")
+    if extracted.creditor_name:
+        values.append(f"#glaeubiger-{extracted.creditor_name}")
+    return _normalize_tags(values)
+
+
+def _merge_document_tags(existing: list[str] | None, new_tags: list[str]) -> list[str]:
+    return _normalize_tags([*(existing or []), *new_tags])
+
+
+def _normalize_tags(values: list[Any]) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        tag = _tagify(str(value))
+        if tag and tag not in seen:
+            seen.add(tag)
+            tags.append(tag)
+    return tags[:20]
+
+
+def _tagify(value: str) -> str | None:
+    tag = value.strip().lower().removeprefix("#")
+    if not tag:
+        return None
+    replacements = {
+        "\u00e4": "ae",
+        "\u00f6": "oe",
+        "\u00fc": "ue",
+        "\u00df": "ss",
+    }
+    for source, target in replacements.items():
+        tag = tag.replace(source, target)
+    tag = "".join(char if char.isalnum() else "-" for char in tag)
+    tag = "-".join(part for part in tag.split("-") if part)
+    return f"#{tag}" if tag else None
+
+
+def _has_meaningful_claim(extracted: ExtractedClaim) -> bool:
+    if not extracted.has_claim:
+        return False
+    return any(
+        [
+            extracted.creditor_name,
+            extracted.amount is not None,
+            extracted.claim_reference,
+            extracted.contract_reference,
+            extracted.previous_creditor_name,
+            extracted.title_exists,
+            extracted.event_type in {"invoice", "reminder", "collection_letter", "court_notice", "payment"},
+        ]
     )
 
 
@@ -116,6 +279,21 @@ def _get_or_create_creditor(db: Session, name: str | None) -> Creditor | None:
     return creditor
 
 
+def _get_or_create_extracted_contact(db: Session, extracted: ExtractedClaim):
+    return get_or_create_contact(
+        db,
+        display_name=extracted.contact_name or extracted.contact_organization or extracted.creditor_name,
+        organization_name=extracted.contact_organization or extracted.creditor_name,
+        person_name=extracted.contact_person,
+        street=extracted.street,
+        postal_code=extracted.postal_code,
+        city=extracted.city,
+        country=extracted.country or "DE",
+        email=extracted.email,
+        phone=extracted.phone,
+    )
+
+
 def _get_or_create_claim(db: Session, creditor: Creditor | None, extracted: ExtractedClaim) -> Claim:
     filters = []
     if extracted.claim_reference:
@@ -125,6 +303,15 @@ def _get_or_create_claim(db: Session, creditor: Creditor | None, extracted: Extr
             and_(
                 Claim.creditor_id == creditor.id,
                 Claim.contract_reference == extracted.contract_reference,
+            )
+        )
+    elif creditor and extracted.amount is not None:
+        filters.append(
+            and_(
+                Claim.creditor_id == creditor.id,
+                Claim.amount == extracted.amount,
+                Claim.claim_reference.is_(None),
+                Claim.contract_reference.is_(None),
             )
         )
 
@@ -139,6 +326,10 @@ def _get_or_create_claim(db: Session, creditor: Creditor | None, extracted: Extr
 
 
 def _apply_extraction_to_claim(claim: Claim, extracted: ExtractedClaim, document: Document) -> None:
+    if extracted.creditor_name:
+        creditor_id = claim.creditor_id
+    else:
+        creditor_id = None
     if extracted.amount is not None:
         claim.amount = extracted.amount
     claim.currency = extracted.currency or "EUR"
@@ -150,11 +341,53 @@ def _apply_extraction_to_claim(claim: Claim, extracted: ExtractedClaim, document
     if extracted.title_type:
         claim.title_type = extracted.title_type
     claim.status = extracted.status
+    if creditor_id:
+        claim.creditor_id = creditor_id
 
     event_date = extracted.event_date or document.document_date
     if event_date:
         claim.first_seen = min([item for item in [claim.first_seen, event_date] if item])
         claim.last_seen = max([item for item in [claim.last_seen, event_date] if item])
+
+
+def _record_transfer_if_needed(
+    db: Session,
+    claim: Claim,
+    creditor: Creditor | None,
+    document: Document,
+    extracted: ExtractedClaim,
+) -> ClaimTransfer | None:
+    if creditor is None:
+        return None
+    if claim.creditor_id is None:
+        claim.creditor_id = creditor.id
+        return None
+    if claim.creditor_id == creditor.id:
+        return None
+
+    existing = db.scalar(
+        select(ClaimTransfer).where(
+            ClaimTransfer.claim_id == claim.id,
+            ClaimTransfer.from_creditor_id == claim.creditor_id,
+            ClaimTransfer.to_creditor_id == creditor.id,
+            ClaimTransfer.document_id == document.id,
+        )
+    )
+    if existing:
+        claim.creditor_id = creditor.id
+        return existing
+
+    transfer = ClaimTransfer(
+        claim_id=claim.id,
+        from_creditor_id=claim.creditor_id,
+        to_creditor_id=creditor.id,
+        document_id=document.id,
+        transfer_date=extracted.transfer_date or extracted.event_date or document.document_date,
+        notes=extracted.notes or f"Forderung wechselte zu {creditor.canonical_name}.",
+    )
+    db.add(transfer)
+    claim.creditor_id = creditor.id
+    return transfer
 
 
 def _upsert_event(db: Session, claim: Claim, document: Document, extracted: ExtractedClaim) -> ClaimEvent:

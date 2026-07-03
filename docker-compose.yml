@@ -28,6 +28,8 @@ services:
       PAPERLESS_USERNAME: ${PAPERLESS_USERNAME:-}
       PAPERLESS_PASSWORD: ${PAPERLESS_PASSWORD:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    volumes:
+      - ./.env:/app/.env
     ports:
       - "8000:8000"
     depends_on:
