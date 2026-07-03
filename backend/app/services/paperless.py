@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.document import Document
 from app.schemas.imports import ImportResult
+from app.services.contacts import link_known_contacts
 
 
 @dataclass
@@ -76,6 +77,8 @@ class PaperlessImporter:
             existing.checksum = parsed.checksum
             existing.confidence_score = parsed.confidence_score
             existing.paperless_url = parsed.paperless_url
+            self.db.flush()
+            link_known_contacts(self.db, existing)
             imported += 1
 
         self.db.commit()
