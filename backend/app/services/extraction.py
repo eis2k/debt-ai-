@@ -8,12 +8,13 @@ from dateutil.parser import parse as parse_date
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.models.claim import Claim, ClaimEvent
+from app.models.claim import Claim, ClaimEvent, ClaimTransfer
 from app.models.creditor import Creditor, CreditorAlias
 from app.models.document import Document
 from app.schemas.ai import AIMessage
 from app.schemas.extraction import ExtractedClaim
 from app.services.ai import complete
+from app.services.contacts import get_or_create_contact, link_document_contact
 
 
 SYSTEM_PROMPT = """Du extrahierst Forderungsdaten aus deutschen Schuldendokumenten.
@@ -22,15 +23,26 @@ Nutze null, wenn ein Feld nicht sicher erkennbar ist.
 JSON-Schema:
 {
   "creditor_name": string | null,
+  "previous_creditor_name": string | null,
   "amount": number | null,
   "currency": "EUR",
   "claim_reference": string | null,
   "contract_reference": string | null,
+  "contact_name": string | null,
+  "contact_organization": string | null,
+  "contact_person": string | null,
+  "street": string | null,
+  "postal_code": string | null,
+  "city": string | null,
+  "country": string | null,
+  "email": string | null,
+  "phone": string | null,
   "title_exists": boolean,
   "title_type": string | null,
   "status": "unknown" | "open" | "paid" | "disputed" | "collection" | "court",
   "event_type": "document_seen" | "invoice" | "reminder" | "collection_letter" | "court_notice" | "payment" | "other",
   "event_date": "YYYY-MM-DD" | null,
+  "transfer_date": "YYYY-MM-DD" | null,
   "notes": string | null
 }
 """
@@ -55,7 +67,12 @@ def extract_and_store_claim(
     )
     extracted = _parse_extraction(content)
     creditor = _get_or_create_creditor(db, extracted.creditor_name)
+    contact = _get_or_create_extracted_contact(db, extracted)
+    if creditor is not None and contact is not None and creditor.contact_id is None:
+        creditor.contact_id = contact.id
+    link_document_contact(db, document, contact, role="sender", confidence=Decimal("0.90"))
     claim = _get_or_create_claim(db, creditor, extracted)
+    _record_transfer_if_needed(db, claim, creditor, document, extracted)
     _apply_extraction_to_claim(claim, extracted, document)
     db.flush()
     _upsert_event(db, claim, document, extracted)
@@ -80,15 +97,26 @@ def _parse_extraction(content: str) -> ExtractedClaim:
     data = json.loads(payload)
     return ExtractedClaim(
         creditor_name=_clean_string(data.get("creditor_name")),
+        previous_creditor_name=_clean_string(data.get("previous_creditor_name")),
         amount=_parse_amount(data.get("amount")),
         currency=(_clean_string(data.get("currency")) or "EUR")[:3].upper(),
         claim_reference=_clean_string(data.get("claim_reference")),
         contract_reference=_clean_string(data.get("contract_reference")),
+        contact_name=_clean_string(data.get("contact_name")),
+        contact_organization=_clean_string(data.get("contact_organization")),
+        contact_person=_clean_string(data.get("contact_person")),
+        street=_clean_string(data.get("street")),
+        postal_code=_clean_string(data.get("postal_code")),
+        city=_clean_string(data.get("city")),
+        country=_clean_string(data.get("country")),
+        email=_clean_string(data.get("email")),
+        phone=_clean_string(data.get("phone")),
         title_exists=bool(data.get("title_exists") or False),
         title_type=_clean_string(data.get("title_type")),
         status=_clean_status(data.get("status")),
         event_type=_clean_event_type(data.get("event_type")),
         event_date=_parse_date(data.get("event_date")),
+        transfer_date=_parse_date(data.get("transfer_date")),
         notes=_clean_string(data.get("notes")),
     )
 
@@ -116,6 +144,21 @@ def _get_or_create_creditor(db: Session, name: str | None) -> Creditor | None:
     return creditor
 
 
+def _get_or_create_extracted_contact(db: Session, extracted: ExtractedClaim):
+    return get_or_create_contact(
+        db,
+        display_name=extracted.contact_name or extracted.contact_organization or extracted.creditor_name,
+        organization_name=extracted.contact_organization or extracted.creditor_name,
+        person_name=extracted.contact_person,
+        street=extracted.street,
+        postal_code=extracted.postal_code,
+        city=extracted.city,
+        country=extracted.country or "DE",
+        email=extracted.email,
+        phone=extracted.phone,
+    )
+
+
 def _get_or_create_claim(db: Session, creditor: Creditor | None, extracted: ExtractedClaim) -> Claim:
     filters = []
     if extracted.claim_reference:
@@ -139,6 +182,10 @@ def _get_or_create_claim(db: Session, creditor: Creditor | None, extracted: Extr
 
 
 def _apply_extraction_to_claim(claim: Claim, extracted: ExtractedClaim, document: Document) -> None:
+    if extracted.creditor_name:
+        creditor_id = claim.creditor_id
+    else:
+        creditor_id = None
     if extracted.amount is not None:
         claim.amount = extracted.amount
     claim.currency = extracted.currency or "EUR"
@@ -150,11 +197,53 @@ def _apply_extraction_to_claim(claim: Claim, extracted: ExtractedClaim, document
     if extracted.title_type:
         claim.title_type = extracted.title_type
     claim.status = extracted.status
+    if creditor_id:
+        claim.creditor_id = creditor_id
 
     event_date = extracted.event_date or document.document_date
     if event_date:
         claim.first_seen = min([item for item in [claim.first_seen, event_date] if item])
         claim.last_seen = max([item for item in [claim.last_seen, event_date] if item])
+
+
+def _record_transfer_if_needed(
+    db: Session,
+    claim: Claim,
+    creditor: Creditor | None,
+    document: Document,
+    extracted: ExtractedClaim,
+) -> ClaimTransfer | None:
+    if creditor is None:
+        return None
+    if claim.creditor_id is None:
+        claim.creditor_id = creditor.id
+        return None
+    if claim.creditor_id == creditor.id:
+        return None
+
+    existing = db.scalar(
+        select(ClaimTransfer).where(
+            ClaimTransfer.claim_id == claim.id,
+            ClaimTransfer.from_creditor_id == claim.creditor_id,
+            ClaimTransfer.to_creditor_id == creditor.id,
+            ClaimTransfer.document_id == document.id,
+        )
+    )
+    if existing:
+        claim.creditor_id = creditor.id
+        return existing
+
+    transfer = ClaimTransfer(
+        claim_id=claim.id,
+        from_creditor_id=claim.creditor_id,
+        to_creditor_id=creditor.id,
+        document_id=document.id,
+        transfer_date=extracted.transfer_date or extracted.event_date or document.document_date,
+        notes=extracted.notes or f"Forderung wechselte zu {creditor.canonical_name}.",
+    )
+    db.add(transfer)
+    claim.creditor_id = creditor.id
+    return transfer
 
 
 def _upsert_event(db: Session, claim: Claim, document: Document, extracted: ExtractedClaim) -> ClaimEvent:
