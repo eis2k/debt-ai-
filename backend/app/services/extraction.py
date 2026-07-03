@@ -24,6 +24,7 @@ JSON-Schema:
 {
   "has_claim": boolean,
   "document_category": "claim" | "invoice" | "reminder" | "collection_letter" | "court_notice" | "payment_proof" | "contract" | "identity_admin" | "private_unrelated" | "advertisement" | "unknown",
+  "document_tags": ["#tag"],
   "creditor_name": string | null,
   "previous_creditor_name": string | null,
   "amount": number | null,
@@ -55,6 +56,9 @@ Setze "document_category" immer passend, auch wenn "has_claim" false ist. Beispi
 "private_unrelated" fuer private Briefe ohne Schuldbezug, "advertisement" fuer Werbung,
 "identity_admin" fuer Ausweis-, Konto-, Versicherungs- oder allgemeine Verwaltungsunterlagen,
 "contract" fuer Vertraege, "payment_proof" fuer Zahlungsbelege.
+Setze 3 bis 8 kurze, deutsche "document_tags" mit fuehrendem #. Beispiele:
+"#forderung", "#inkasso", "#mahnung", "#rechnung", "#vertrag", "#werbung",
+"#verwaltung", "#zahlungsbeleg", "#privat", "#gericht", "#konto", "#versicherung".
 """
 
 
@@ -77,6 +81,7 @@ def extract_and_store_claim(
     )
     extracted = _parse_extraction(content)
     document.document_type = _category_label(extracted.document_category)
+    document.tags = _merge_document_tags(document.tags, _tags_from_extraction(extracted))
     if not _has_meaningful_claim(extracted):
         db.commit()
         db.refresh(document)
@@ -114,6 +119,7 @@ def _parse_extraction(content: str) -> ExtractedClaim:
     return ExtractedClaim(
         has_claim=bool(data.get("has_claim") or False),
         document_category=_clean_document_category(data.get("document_category")),
+        document_tags=_normalize_tags(data.get("document_tags") if isinstance(data.get("document_tags"), list) else []),
         creditor_name=_clean_string(data.get("creditor_name")),
         previous_creditor_name=_clean_string(data.get("previous_creditor_name")),
         amount=_parse_amount(data.get("amount")),
@@ -172,6 +178,66 @@ def _category_label(category: str) -> str:
         "unknown": "Unbekannt",
     }
     return labels.get(category, "Unbekannt")
+
+
+def _tags_from_extraction(extracted: ExtractedClaim) -> list[str]:
+    category_tags = {
+        "claim": "#forderung",
+        "invoice": "#rechnung",
+        "reminder": "#mahnung",
+        "collection_letter": "#inkasso",
+        "court_notice": "#gericht",
+        "payment_proof": "#zahlungsbeleg",
+        "contract": "#vertrag",
+        "identity_admin": "#verwaltung",
+        "private_unrelated": "#privat",
+        "advertisement": "#werbung",
+        "unknown": "#unklar",
+    }
+    values = [*extracted.document_tags, category_tags.get(extracted.document_category, "#unklar")]
+    if extracted.has_claim:
+        values.append("#forderung")
+    if extracted.title_exists:
+        values.append("#titel")
+    if extracted.status and extracted.status != "unknown":
+        values.append(f"#{extracted.status}")
+    if extracted.event_type and extracted.event_type != "document_seen":
+        values.append(f"#{extracted.event_type}")
+    if extracted.creditor_name:
+        values.append(f"#glaeubiger-{extracted.creditor_name}")
+    return _normalize_tags(values)
+
+
+def _merge_document_tags(existing: list[str] | None, new_tags: list[str]) -> list[str]:
+    return _normalize_tags([*(existing or []), *new_tags])
+
+
+def _normalize_tags(values: list[Any]) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        tag = _tagify(str(value))
+        if tag and tag not in seen:
+            seen.add(tag)
+            tags.append(tag)
+    return tags[:20]
+
+
+def _tagify(value: str) -> str | None:
+    tag = value.strip().lower().removeprefix("#")
+    if not tag:
+        return None
+    replacements = {
+        "\u00e4": "ae",
+        "\u00f6": "oe",
+        "\u00fc": "ue",
+        "\u00df": "ss",
+    }
+    for source, target in replacements.items():
+        tag = tag.replace(source, target)
+    tag = "".join(char if char.isalnum() else "-" for char in tag)
+    tag = "-".join(part for part in tag.split("-") if part)
+    return f"#{tag}" if tag else None
 
 
 def _has_meaningful_claim(extracted: ExtractedClaim) -> bool:
