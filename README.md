@@ -11,6 +11,7 @@ DebtAI ist eine lokal betriebene Anwendung zur Analyse und Konsolidierung von Sc
 - vorbereiteter KI-Anschluss fuer OpenAI, Gemini und Claude
 - KI-Extraktion fuer Forderungsdaten aus OCR-Texten
 - automatische Klassifikation auch fuer Dokumente ohne Schuldbezug
+- automatische Vergabe passender `#tags` pro Dokument
 - Speicherung erkannter Kontakte, Adressen, Glaeubiger, Forderungen und Forderungsereignisse
 - automatische Verknuepfung neuer Briefe mit bekannten Kontakten
 - Historie fuer Forderungswechsel von einem Glaeubiger zum naechsten
@@ -179,6 +180,7 @@ KI-Anbieter und speichert die erkannten Daten in den Tabellen `contacts`,
 Erkannt werden unter anderem:
 
 - Dokumentkategorie, auch wenn keine Forderung enthalten ist
+- passende Dokument-Tags wie `#forderung`, `#inkasso`, `#vertrag`, `#werbung` oder `#verwaltung`
 - Glaeubiger
 - Kontaktname und Adressdaten
 - Forderungsbetrag und Waehrung
@@ -195,6 +197,8 @@ aber, dass kein KI-Anbieter eingerichtet ist.
 Auch Dokumente ohne Schuldbezug werden verarbeitet. DebtAI speichert dann keine
 Forderung, setzt aber den Dokumenttyp, zum Beispiel `Werbung`, `Vertrag`,
 `Verwaltung`, `Zahlungsbeleg`, `Privat / ohne Schuldbezug` oder `Unbekannt`.
+Zusaetzlich vergibt DebtAI automatisch passende `#tags`, die in der
+Dokumentenliste sichtbar sind und ueber die Suche gefunden werden koennen.
 
 Wenn ein Kontakt einmal erkannt wurde, legt DebtAI einen Alias an. Beim naechsten
 Paperless-Import wird der OCR-Text gegen bekannte Aliasnamen geprueft und der
