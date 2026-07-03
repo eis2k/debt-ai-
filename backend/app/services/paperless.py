@@ -25,6 +25,7 @@ class PaperlessDocument:
     created_at: datetime | None
     document_date: date | None
     document_type: str | None
+    tags: list[str]
     ocr_text: str | None
     checksum: str | None
     confidence_score: float | None
@@ -73,6 +74,7 @@ class PaperlessImporter:
             existing.created_at = parsed.created_at
             existing.document_date = parsed.document_date
             existing.document_type = parsed.document_type
+            existing.tags = _merge_tags(existing.tags, parsed.tags)
             existing.ocr_text = parsed.ocr_text
             existing.checksum = parsed.checksum
             existing.confidence_score = parsed.confidence_score
@@ -138,6 +140,7 @@ class PaperlessImporter:
             created_at=self._parse_datetime(payload.get("created")),
             document_date=self._parse_date(payload.get("created_date") or payload.get("document_date")),
             document_type=self._name_from_nested(payload.get("document_type")),
+            tags=_normalize_tags(self._tags_from_payload(payload)),
             ocr_text=content,
             checksum=checksum,
             confidence_score=self._parse_confidence(payload),
@@ -176,3 +179,43 @@ class PaperlessImporter:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _tags_from_payload(payload: dict[str, Any]) -> list[str]:
+        values = payload.get("tags") or payload.get("tag_names") or []
+        if not isinstance(values, list):
+            return []
+        tags: list[str] = []
+        for value in values:
+            if isinstance(value, dict):
+                tag = value.get("name") or value.get("slug") or value.get("id")
+            else:
+                tag = value
+            if tag is not None:
+                tags.append(str(tag))
+        return tags
+
+
+def _merge_tags(existing: list[str] | None, new_tags: list[str]) -> list[str]:
+    return _normalize_tags([*(existing or []), *new_tags])
+
+
+def _normalize_tags(values: list[str]) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        tag = _tagify(value)
+        if tag and tag not in seen:
+            seen.add(tag)
+            tags.append(tag)
+    return tags[:20]
+
+
+def _tagify(value: str) -> str | None:
+    tag = value.strip().lower()
+    if not tag:
+        return None
+    tag = tag.removeprefix("#")
+    tag = "".join(char if char.isalnum() else "-" for char in tag)
+    tag = "-".join(part for part in tag.split("-") if part)
+    return f"#{tag}" if tag else None
