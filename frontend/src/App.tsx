@@ -1,4 +1,6 @@
 import DownloadIcon from "@mui/icons-material/Download";
+import CancelIcon from "@mui/icons-material/Cancel";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -770,6 +772,11 @@ export default function App() {
                 />
                 <Chip label={`Modus: ${aiStatus?.mode ?? mode}`} />
                 <Chip label={`${aiStatus?.available_providers.length ?? 0} Anbieter bereit`} />
+                <Chip
+                  icon={aiStatus?.ollama_available ? <CheckCircleIcon /> : <CancelIcon />}
+                  color={aiStatus?.ollama_available ? "success" : "default"}
+                  label={aiStatus?.ollama_available ? "Ollama erreichbar" : "Ollama nicht erreichbar"}
+                />
               </Stack>
             </Box>
 
@@ -824,7 +831,9 @@ export default function App() {
                       value={aiSettings.ollama_base_url}
                       disabled={offlineDisabled}
                       onChange={(event) => patchAISettings({ ollama_base_url: event.target.value })}
-                      helperText="Im Docker-Netz meist http://ollama:11434"
+                      helperText={`Windows-Standard: http://host.docker.internal:11434${
+                        aiStatus?.ollama_detected_url ? `, erkannt: ${aiStatus.ollama_detected_url}` : ""
+                      }`}
                     />
                   </Stack>
                 </Box>
