@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, Integer, Numeric, String, Text, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -17,6 +18,7 @@ class Document(Base):
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     document_date: Mapped[date | None] = mapped_column(Date)
     document_type: Mapped[str | None] = mapped_column(String(255))
+    tags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
     ocr_text: Mapped[str | None] = mapped_column(Text)
     checksum: Mapped[str | None] = mapped_column(String(128))
     confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
